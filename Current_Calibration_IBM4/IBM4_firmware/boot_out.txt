@@ -1,3 +1,0 @@
-Adafruit CircuitPython 10.2.1 on 2026-05-13; Adafruit ItsyBitsy M4 Express with samd51g19
-Board ID:itsybitsy_m4_express
-UID:000F9415484633532020204E471110FF
