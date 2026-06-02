@@ -604,6 +604,8 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
         print(ERR_STATEMENT)
         print(e)
 
+
+
 def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_voltage=1, Responce_times = None):
     # """
     plt.figure(figsize=(10, 15))
@@ -734,7 +736,7 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
 
 
 
-
+"""
 
 A0 = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
 A1 = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
@@ -770,3 +772,6 @@ plt.title("Response Time vs Current for Different Voltage Limits with 1% Toleran
 plt.legend()
 plt.show()
 plt.show()
+
+
+"""
