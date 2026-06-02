@@ -581,7 +581,7 @@ class Ser_Iface(object):
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)    
-            
+
     def DifferentialRead(self, pos_channel, neg_channel, read_type = 'Single Voltage', no_reads = 10):
         
         """
@@ -1614,4 +1614,86 @@ class Ser_Iface(object):
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)    
-        
+
+
+
+
+    def send_mes(self, msg, loud=True):
+        self.FUNC_NAME = ".send_mes()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                write_cmd = 'Message%(v1)s\r\n' % {"v1": str(msg)}
+                self.instr_obj.reset_input_buffer()
+                self.instr_obj.write(str.encode(write_cmd))
+                sent_line = write_cmd.strip()
+                response = ""
+
+                # Some firmware/USB stacks echo the command first (e.g. "Message2").
+                # Read a few lines and keep the first non-empty line that is not the echo.
+                for _ in range(4):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+                    if line and line != sent_line:
+                        response = line
+                        break
+
+                if loud:
+                    print(response)
+                return response
+            else:
+                self.ERR_STATEMENT += '\nCould not write to instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+
+
+    def echo_IBM4_saved_data(self, loud=True):
+        """
+        Echo the saved data from the IBM4 display.
+
+        Returns:
+        str | None: saved payload text if present, else None
+        """
+
+        self.FUNC_NAME = ".echo_IBM4_saved_data()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                # Sending bare "echo" asks firmware to return the saved payload.
+                write_cmd = 'echo\r\n'
+                self.instr_obj.reset_input_buffer()
+                self.instr_obj.write(str.encode(write_cmd))
+
+                response = ""
+                sent_line = write_cmd.strip()
+                for _ in range(4):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+                    if line and line != sent_line:
+                        response = line
+                        break
+
+                saved_val = None
+                if response.startswith('Saved message: '):
+                    saved_val = response[len('Saved message: '):]
+                elif response == 'No saved message':
+                    saved_val = None
+
+                if loud:
+                    print(response)
+                return saved_val
+            else:
+                self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+            return None

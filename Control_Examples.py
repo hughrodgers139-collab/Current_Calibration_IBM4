@@ -436,6 +436,12 @@ def Linear_Sweep_V2():
         print(ERR_STATEMENT)
         print(e)
 
+
+
+
+
+
+
 def read_all_channels_live(no_reads = 31, refresh_time = 0.2):
     """
     Continuously read all channels and refresh output in-place.
@@ -466,7 +472,6 @@ def read_all_channels_live(no_reads = 31, refresh_time = 0.2):
             del the_dev # destructor for the IBM4 object, closes comms
         except Exception:
             pass
-
 
 
 def CurCal():
@@ -526,6 +531,7 @@ def derivative(vals, times):
     dv = numpy.diff(vals)
     return dv / dt
 
+
 def smooth_signal(vals, window_size):
     """
     Apply a moving average twice to smooth the signal.
@@ -539,6 +545,7 @@ def smooth_signal(vals, window_size):
     smoothed_twice = numpy.convolve(padded_once, kernel, mode='valid')
     # Ensure output length matches input
     return smoothed_twice[:len(vals)]
+
 
 def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
     """
@@ -556,7 +563,10 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
         # ---------------------------------------------------------------------------------------------------------------------
         the_dev.output_voltage_zero_to_hero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
         # ---------------------------------------------------------------------------------------------------------------------
-        Nreads = 5000 # number of reads
+        if A0_voltage < 0.03:
+            Nreads = 5000 # number of reads
+        else:
+            Nreads = 1000 # number of reads
         # ---------------------------------------------------------------------------------------------------------------------
         input_ch = 'A3'
         # Only apply scaling if A0_voltage is not zero or too small
@@ -603,7 +613,6 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
-
 
 
 def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_voltage=1, Responce_times = None):
@@ -730,14 +739,13 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
         responce_time = Slope_P3_volt_val["segment_end"]
 
 
-    return results, near_zero_slopes, slope_values, responce_time, Responce_times
+    return results, near_zero_slopes, slope_values, responce_time, Responce_times    
 
-    
+
 
 
 
 """
-
 A0 = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
 A1 = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
 
@@ -772,6 +780,50 @@ plt.title("Response Time vs Current for Different Voltage Limits with 1% Toleran
 plt.legend()
 plt.show()
 plt.show()
-
-
 """
+
+
+def send_message():
+    """
+    Send a message to the IBM4 display
+    """
+    
+    FUNC_NAME = ".send_message()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    
+    try:
+        # instantiate an object that interfaces with the IBM4
+        the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
+        print("\n")
+
+        response = the_dev.send_mes(msg="Hello, IBM4!")
+
+        print("\n")
+       
+        del the_dev # destructor for the IBM4 object, closes comms
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+
+
+def Echo():
+    """
+    Echo the saved data from the IBM4 display
+    """
+    
+    FUNC_NAME = ".echo_IBM4_saved_data()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    
+    try:
+        # instantiate an object that interfaces with the IBM4
+        the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
+        print("\n")
+
+        response = the_dev.echo_IBM4_saved_data()
+
+        print("\n")
+       
+        del the_dev # destructor for the IBM4 object, closes comms
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)

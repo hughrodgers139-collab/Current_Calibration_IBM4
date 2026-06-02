@@ -2,6 +2,7 @@ import supervisor
 import time
 import board
 import pwmio
+import microcontroller
 from analogio import AnalogIn
 from analogio import AnalogOut
 
@@ -88,11 +89,54 @@ def Simple_Read():
         print('\nERROR: Simple_Read\n')
         print(e)
 
+
+def Save_Message(payload):
+    try:
+        msg = str(payload).encode('utf-8')
+        # Store [len_low, len_high, payload_bytes...] in NVM.
+        nvm = microcontroller.nvm
+        max_len = len(nvm) - 2
+        if max_len < 1:
+            return False
+        if len(msg) > max_len:
+            msg = msg[:max_len]
+
+        n = len(msg)
+        nvm[0] = n & 0xFF
+        nvm[1] = (n >> 8) & 0xFF
+        for i in range(max_len):
+            nvm[i + 2] = 0
+        for i, b in enumerate(msg):
+            nvm[i + 2] = b
+        return True
+    except Exception as ex:
+        print('ERROR: Save_Message failed')
+        print(ex)
+        return False
+
+
+def Load_Message():
+    try:
+        nvm = microcontroller.nvm
+        n = int(nvm[0]) | (int(nvm[1]) << 8)
+        if n <= 0:
+            return None
+        max_len = len(nvm) - 2
+        n = min(n, max_len)
+        data = bytes(nvm[2:2 + n])
+        return data.decode('utf-8', errors='replace')
+    except Exception as ex:
+        print('ERROR: Load_Message failed')
+        print(ex)
+        return None
+
+
 while True:
     if supervisor.runtime.serial_bytes_available:   # Listens for a serial command
         command = input()
         if command.startswith("*IDN"):
             print('ISBY-UCC-RevA.1')
+        
         if command.startswith("Calibrate"):
             try:
                 with open("/Calibration.txt", "r") as fp:
@@ -112,6 +156,7 @@ while True:
         elif command.startswith("Mode"):
             TheMode = int(command[4:])
             print(TheMode)
+            
         elif command.startswith("PWM"):
             try:
                 Tokens = command[3:].split(":")
@@ -139,6 +184,7 @@ while True:
             else:
                 print("PWMset", ThePin, "=", str(SetPWM), end=' ')
                 print()
+
         elif command.startswith("Write"):
             try:
                 Tokens = command[5:].split(":")
@@ -162,6 +208,7 @@ while True:
             else:
                 print("Vset", Chan, "=", str(SetVoltage), end=' ')
                 print()
+
         elif command.startswith("Read"):
             try:
                 Tokens = command[4:].split(":")
@@ -202,6 +249,7 @@ while True:
                     for i in range(1, N):
                         print(",", str((Values[i]-Ref)*Mult), end=' ')
                     print()
+
         elif command.startswith("Average"):
             try:
                 Tokens = command[7:].split(":")
@@ -240,6 +288,7 @@ while True:
                         Value += get_voltage(Pin)
                     Value /= N
                     print("Average", Chan, "=", str((Value-Ref)*Mult))
+
         elif command.startswith("BRead"):
             try:
                 Tokens = command[5:].split(":")
@@ -273,6 +322,7 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]), end=' ')
                     print()
+
         elif command.startswith("Diff_Read"):
             try:
                 Tokens = command[9:].split(":")
@@ -322,6 +372,7 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]*Mult), end=' ')
                     print()
+
         elif command.startswith("Diff_Average"):
             try:
                 Tokens = command[12:].split(":")
@@ -369,6 +420,7 @@ while True:
                         Value += (get_voltage(Pplus) - get_voltage(Pminus))
                     Value /= N
                     print("Average =", str(Value*Mult))
+
         elif command.startswith("Diff_BRead"):
             try:
                 Tokens = command[10:].split(":")
@@ -421,11 +473,46 @@ while True:
             Simple_Vout_A1(command)
         elif command.startswith("l"):
             Simple_Read()
+
+
+
+        elif command.startswith("Message"):
+            try:
+                payload = command[len("Message"):].strip()
+                if payload:
+                    ok = Save_Message(payload)
+                    if ok:
+                        print('Message saved: ' + payload)
+                    else:
+                        print('ERROR: Could not save message')
+                else:
+                    saved = Load_Message()
+                    if saved is None:
+                        print('No saved message')
+                    else:
+                        print('Saved message: ' + saved)
+
+            except Exception as ex:
+                print('Unknown problem, Message command not received')
+                print(ex)
+                
+
+        elif command.startswith("echo"):
+            try:
+                # Echo the payload previously saved by Message.
+                payload = Load_Message()
+                if payload is None:
+                    print('No saved message')
+                else:
+                    print(payload)
+            except Exception as ex:
+                print('Unknown problem, echo command not received')
+                print(ex)
+
         else:
             print('\nERROR: Unknown command entered\n')
-#    else:
-#        print('If you can read this something has gone very wrong. ')
 
 
 
-
+    else:
+        pass

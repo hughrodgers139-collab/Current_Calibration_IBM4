@@ -15,7 +15,7 @@ print(pwd)
 
 
 # 0. Basic Find, Open, Close
-Control_Examples.Simple_Open_Close()
+# Control_Examples.Simple_Open_Close()
 
 # 1. Step through voltages
 #Control_Examples.Step_Through_Voltages()
@@ -40,3 +40,6 @@ Control_Examples.Simple_Open_Close()
 # Control_Examples.Linear_Sweep_V2()
 
 # Control_Examples.CurCal()
+
+Control_Examples.send_message()
+Control_Examples.Echo()
