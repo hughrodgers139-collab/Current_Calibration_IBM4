@@ -97,10 +97,13 @@ class Ser_Iface(object):
         read_mode = 'DC' =>  IBM4 assumes analog inputs in the range [0, 3.3)
         read_mode = 'AC' =>  IBM4 assumes analog inputs in the range [-8, +8]
         """        
+        self.MOD_NAME_STR = "IBM4_Lib"
+        self.FUNC_NAME = ".Ser_Iface()" # use this in exception handling messages
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+        self.IBM4Port = None
+        self.instr_obj = None
+
         try:
-            self.MOD_NAME_STR = "IBM4_Lib"
-            self.FUNC_NAME = ".Ser_Iface()" # use this in exception handling messages
-            self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
             # Dictionaries for the Read, Write, PWM Channels
             self.Read_Chnnls = {"A2":0, "A3":1, "A4":2, "A5":3, "D2":4}
@@ -147,13 +150,20 @@ class Ser_Iface(object):
         close the link to the instrument object when it goes out of scope
         """
         
-        if self.IBM4Port != '' and self.instr_obj.isOpen():
-            # close the link to the instrument object when it goes out of scope
-            print('Closing Serial link with:',self.instr_obj.name)
-            self.ZeroIBM4()
-            self.instr_obj.close()
-        else:
-            # Do nothing, no link to IBM4 established
+        try:
+            port_name = getattr(self, 'IBM4Port', None)
+            instr_obj = getattr(self, 'instr_obj', None)
+
+            if port_name and instr_obj is not None and instr_obj.isOpen():
+                # close the link to the instrument object when it goes out of scope
+                print('Closing Serial link with:', instr_obj.name)
+                self.ZeroIBM4()
+                instr_obj.close()
+            else:
+                # Do nothing, no link to IBM4 established
+                pass
+        except Exception:
+            # Never throw from __del__
             pass
             
     def __str__(self):
@@ -192,7 +202,7 @@ class Ser_Iface(object):
         investigate the status of the serial comms link
         """
         
-        if self.IBM4Port is not None and self.instr_obj.isOpen():
+        if self.IBM4Port is not None and self.instr_obj is not None and self.instr_obj.isOpen():
             if loud: print('Communication with:',self.instr_obj.name,' is open')
             return True
         else:
@@ -267,7 +277,7 @@ class Ser_Iface(object):
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
-            if self.instr_obj.isOpen():
+            if self.instr_obj is not None and self.instr_obj.isOpen():
                 self.instr_obj.write(b'*IDN\r\n')
                 response = self.instr_obj.read_until('\n',size=None)
                 Code=response.rsplit(b'\r\n')
