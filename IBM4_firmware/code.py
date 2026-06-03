@@ -2,6 +2,8 @@ import supervisor
 import time
 import board
 import pwmio
+import microcontroller
+import json
 from analogio import AnalogIn
 from analogio import AnalogOut
 
@@ -88,11 +90,93 @@ def Simple_Read():
         print('\nERROR: Simple_Read\n')
         print(e)
 
+
+def Save_Values(payload):
+    # Store full payload to filesystem and mirror to NVM when possible.
+    try:
+        if isinstance(payload, dict):
+            msg_txt = json.dumps(payload)
+        else:
+            msg_txt = str(payload)
+
+        file_saved = False
+        try:
+            with open("/saved_payload.json", "w") as fp:
+                fp.write(msg_txt)
+            file_saved = True
+        except Exception:
+            file_saved = False
+
+        nvm_saved = False
+        nvm = microcontroller.nvm
+        msg = msg_txt.encode('utf-8')
+        n = len(msg)
+        max_len = len(nvm) - 2
+        if n > max_len:
+            n = max_len
+            msg = msg[:n]
+        nvm[0] = n & 0xFF
+        nvm[1] = (n >> 8) & 0xFF
+        nvm[2:2 + n] = msg
+        nvm_saved = True
+
+        return file_saved or nvm_saved
+    except Exception as ex:
+        print('ERROR: Save_Message failed')
+        print(ex)
+        return False
+
+def Get_saved_value(key=None):
+    # Read full payload from filesystem first, then fall back to NVM.
+    try:
+        decoded = None
+
+        try:
+            with open("/saved_payload.json", "r") as fp:
+                decoded = fp.read()
+        except Exception:
+            decoded = None
+
+        if not decoded:
+            # Fallback to NVM: bytes 0-1 = length (little-endian), bytes 2+ = UTF-8 data
+            nvm = microcontroller.nvm
+            n = nvm[0] | (nvm[1] << 8)
+            max_len = len(nvm) - 2
+            if n == 0 or n > max_len:
+                return None
+            data = bytes(nvm[2:2 + n])
+            decoded = data.decode('utf-8')
+
+        if not decoded:
+            return None
+
+        try:
+            parsed = json.loads(decoded)
+            if key is None:
+                if isinstance(parsed, dict):
+                    return json.dumps(parsed)
+                return str(parsed)
+            if isinstance(parsed, dict) and key in parsed:
+                return str(parsed[key])
+            return None
+        except Exception:
+            # Backward-compatible fallback for non-JSON payloads.
+            if key is None:
+                return decoded
+            return None
+    except Exception as ex:
+        print('ERROR: Load_Dictionary failed')
+        print(ex)
+        return None
+
+
 while True:
     if supervisor.runtime.serial_bytes_available:   # Listens for a serial command
         command = input()
+        
         if command.startswith("*IDN"):
             print('ISBY-UCC-RevA.1')
+         #   """
         if command.startswith("Calibrate"):
             try:
                 with open("/Calibration.txt", "r") as fp:
@@ -112,6 +196,7 @@ while True:
         elif command.startswith("Mode"):
             TheMode = int(command[4:])
             print(TheMode)
+            
         elif command.startswith("PWM"):
             try:
                 Tokens = command[3:].split(":")
@@ -139,6 +224,7 @@ while True:
             else:
                 print("PWMset", ThePin, "=", str(SetPWM), end=' ')
                 print()
+
         elif command.startswith("Write"):
             try:
                 Tokens = command[5:].split(":")
@@ -162,6 +248,7 @@ while True:
             else:
                 print("Vset", Chan, "=", str(SetVoltage), end=' ')
                 print()
+
         elif command.startswith("Read"):
             try:
                 Tokens = command[4:].split(":")
@@ -202,6 +289,7 @@ while True:
                     for i in range(1, N):
                         print(",", str((Values[i]-Ref)*Mult), end=' ')
                     print()
+
         elif command.startswith("Average"):
             try:
                 Tokens = command[7:].split(":")
@@ -240,6 +328,7 @@ while True:
                         Value += get_voltage(Pin)
                     Value /= N
                     print("Average", Chan, "=", str((Value-Ref)*Mult))
+
         elif command.startswith("BRead"):
             try:
                 Tokens = command[5:].split(":")
@@ -273,6 +362,7 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]), end=' ')
                     print()
+
         elif command.startswith("Diff_Read"):
             try:
                 Tokens = command[9:].split(":")
@@ -322,6 +412,7 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]*Mult), end=' ')
                     print()
+
         elif command.startswith("Diff_Average"):
             try:
                 Tokens = command[12:].split(":")
@@ -369,6 +460,7 @@ while True:
                         Value += (get_voltage(Pplus) - get_voltage(Pminus))
                     Value /= N
                     print("Average =", str(Value*Mult))
+
         elif command.startswith("Diff_BRead"):
             try:
                 Tokens = command[10:].split(":")
@@ -415,17 +507,69 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]), end=' ')
                     print()
+        
         elif command.startswith("a"):
             Simple_Vout_A0(command)
         elif command.startswith("b"):
             Simple_Vout_A1(command)
         elif command.startswith("l"):
             Simple_Read()
+
+        elif command.startswith("Message"):
+            try:
+                payload = command[len("Message"):].strip()
+                if payload:
+                    payload_to_save = payload
+                    # If payload looks like a JSON object, parse it so Save_Message
+                    # receives a dictionary rather than a plain string.
+                    if payload.startswith("{") and payload.endswith("}"):
+                        try:
+                            parsed = json.loads(payload)
+                            if isinstance(parsed, dict):
+                                payload_to_save = parsed
+                        except Exception:
+                            payload_to_save = payload
+
+                    ok = Save_Values(payload_to_save)
+                    if ok:
+                        print('Message saved: ' + payload)
+                    else:
+                        print('ERROR: Could not save message')
+                else:
+                    saved = Get_saved_value()
+                    if saved is None:
+                        print('No saved message')
+                    else:
+                        print('Saved message: ' + saved)
+
+            except Exception as ex:
+                print('Unknown problem, Message command not received')
+                print(ex)
+
+
+        elif command.startswith("echo"):
+            try:
+                # Echo the saved payload, or a specific key if one is provided.
+                key = command[len("echo"):].strip()
+                payload = Get_saved_value(key) if key else Get_saved_value()
+                if payload is None:
+                    if key:
+                        print('No saved value for key: ' + key)
+                    else:
+                        print('No saved message')
+                else:
+                    if key:
+                        print('Saved value: ' + payload)
+                    else:
+                        print('Saved message: ' + payload)
+            except Exception as ex:
+                print('Unknown problem, echo command not received')
+                print(ex)
+
         else:
             print('\nERROR: Unknown command entered\n')
-#    else:
-#        print('If you can read this something has gone very wrong. ')
 
 
 
-
+    else:
+        pass

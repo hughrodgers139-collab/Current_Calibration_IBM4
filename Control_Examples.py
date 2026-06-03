@@ -15,9 +15,20 @@ R. Sheehan 12 - 6 - 2024
 
 
 import time
+import os
 import numpy
 import Sweep_Interval
 import IBM4_Lib
+
+import matplotlib
+
+# Avoid Qt Wayland window-activation warnings on Linux Wayland sessions.
+if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+    try:
+        matplotlib.use("TkAgg")
+    except Exception:
+        matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 
 # --- Moving average and smoothing utilities (module level) ---
@@ -48,6 +59,8 @@ def Simple_Open_Close():
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
+        return None, None
+        return None, None
 
 def Step_Through_Voltages():
     """
@@ -96,6 +109,7 @@ def Step_Through_Voltages():
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
+        return None, None
 
 def Simple_Sweep():
     """
@@ -526,6 +540,7 @@ def derivative(vals, times):
     dv = numpy.diff(vals)
     return dv / dt
 
+
 def smooth_signal(vals, window_size):
     """
     Apply a moving average twice to smooth the signal.
@@ -540,7 +555,8 @@ def smooth_signal(vals, window_size):
     # Ensure output length matches input
     return smoothed_twice[:len(vals)]
 
-def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
+
+def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
     """
     Perform multiple readings to read a waveform
     use the overloaded ReadVoltage Method to obtain an averaged reading
@@ -550,14 +566,26 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
     FUNC_NAME = ".Read_Waveform_current()"
     ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
     
+    local_dev = None
+
     try:
-        # ---------------------------------------------------------------------------------------------------------------------
-        the_dev = IBM4_Lib.Ser_Iface(read_mode = 'DC') # find the first connected IBM4 this can be changed in the IBM4 firmware
-        # ---------------------------------------------------------------------------------------------------------------------
+        if Responce_times is None:
+            Responce_times = {}
+        elif not isinstance(Responce_times, dict):
+            Responce_times = {}
+
+        if the_dev is None:
+            local_dev = IBM4_Lib.Ser_Iface(read_mode = 'DC')
+            the_dev = local_dev
+
         the_dev.output_voltage_zero_to_hero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
         # ---------------------------------------------------------------------------------------------------------------------
-        Nreads = 5000 # number of reads
+        if A0_voltage < 0.03:
+            Nreads = 2000 # number of reads
+        else:
+            Nreads = 1000 # number of reads
         # ---------------------------------------------------------------------------------------------------------------------
+        
         input_ch = 'A3'
         # Only apply scaling if A0_voltage is not zero or too small
 
@@ -576,48 +604,50 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times = []):
 
         double_ma_vals = smooth_signal(vals, window_size = 200)
 
-        plateau_results, near_zero_slopes, slope_values, responce_time, Responce_times = segment_regressions(times, 
-                                                                                            double_ma_vals, 
-                                                                                            segment_length=250, 
-                                                                                            A0_voltage=A0_voltage, 
-                                                                                            A1_voltage=A1_voltage, 
-                                                                                            Responce_times = Responce_times
-                                                                                            )
+        plateau_results, near_zero_slopes, slope_values, responce_time = segment_regressions(times,
+                                                      double_ma_vals,
+                                                      segment_length=250,
+                                                      A0_voltage=A0_voltage,
+                                                      A1_voltage=A1_voltage,
+                                                      show_plots=show_plots
+                                                      )
         
-        # """        
-        plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.2f} s")
-        plt.show()
-        time.sleep(1)
-        plt.close()
-        # """
+        if show_plots: 
+            plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.4f} s")
+            plt.show()
+            time.sleep(1)
+            plt.close()
+        
 
-        Responce_times.append(responce_time*measurement_time)
-        print("\n\n")
-        print("Response times: ", numpy.round(Responce_times, 3))
-        print("\n\n")
+        plateau_time_seconds = times[responce_time] if len(times) > responce_time else responce_time * measurement_time
+        voltage_key = f"{A0_voltage:.3f}V"
+        Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
 
-        # ---------------------------------------------------------------------------------------------------------------------        
-        del the_dev
-        # ---------------------------------------------------------------------------------------------------------------------
-        return times, double_ma_vals, Responce_times
+        return Responce_times
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
+        return Responce_times
+    finally:
+        if local_dev is not None:
+            del local_dev
 
 
-
-def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_voltage=1, Responce_times = None):
-    # """
-    plt.figure(figsize=(10, 15))
-    plt.xlabel("Time (s)")
-    plt.ylabel("Voltage (V)")
-    plt.title(f"current: {A0_voltage*87} mA & A1: {A1_voltage/50*1000} mA")
-    # """
+def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_voltage=1, show_plots=False):
+    if show_plots:
+        plt.figure(figsize=(10, 15))
+        plt.xlabel("Time (s)")
+        plt.ylabel("Voltage (V)")
+        plt.title(f"current: {A0_voltage*87} mA & A1: {A1_voltage/50*1000} mA")
+  
 
     t = numpy.asarray(times)
     y = numpy.asarray(values)
 
     n = len(y)
+    if n < 2:
+        return [], [], [], 0
+
     results = []
     near_zero_slopes = []
     slope_threshold = 1e-4  
@@ -647,6 +677,7 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
             slope = 0
             intercept = y_mean
             r2 = 0
+            y_pred = numpy.full_like(t_seg, fill_value=y_mean, dtype=float)
         else:
             slope = cov / var
             intercept = y_mean - slope * t_mean
@@ -657,8 +688,7 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
             # R²
             ss_res = numpy.sum((y_seg - y_pred)**2)
             ss_tot = numpy.sum((y_seg - y_mean)**2)
-            r2 = 1 - ss_res / ss_tot if ss_tot != 0 else 0
-        # ------------------------------------------------------------------------------------------------------------------------
+            r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
 
         results.append({
             "segment_start": start,
@@ -678,22 +708,31 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
             })
 
 
-        # """
-        if count <5 or A0_voltage < 0.03:
-            plt.plot(t_seg, y_seg, 'o')
-            plt.plot(t_seg, y_pred, 'r--')
-            plt.xlabel("Time (s)", fontsize=14)
-            plt.ylabel("Voltage (V)", fontsize=14)
-            plt.text(t_seg.mean(), y_seg.mean(), f"s:{slope/A0_voltage:.3f}", fontsize=16)
-        # """
+        if show_plots:
+            if count <5 or A0_voltage < 0.03:
+                plt.plot(t_seg, y_seg, 'o')
+                plt.plot(t_seg, y_pred, 'r--')
+                plt.xlabel("Time (s)", fontsize=14)
+                plt.ylabel("Voltage (V)", fontsize=14)
+                if abs(A0_voltage) > 1e-12:
+                    slope_norm = slope / A0_voltage
+                else:
+                    slope_norm = slope
+                plt.text(t_seg.mean(), y_seg.mean(), f"s:{slope_norm:.3f}", fontsize=16)
+            
         count += 1
-        slope_values.append(slope/A0_voltage)
+        if abs(A0_voltage) > 1e-12:
+            slope_values.append(slope / A0_voltage)
+        else:
+            slope_values.append(slope)
 
+    if len(results) == 0 or len(slope_values) == 0:
+        return results, near_zero_slopes, slope_values, n - 1
 
     max_slope_segment = max(range(len(slope_values)), key=lambda i: slope_values[i])
-    Slope_P1 = max_slope_segment + 1
-    Slope_P2 = max_slope_segment + 2
-    Slope_P3 = max_slope_segment + 3
+    Slope_P1 = min(max_slope_segment + 1, len(results) - 1)
+    Slope_P2 = min(max_slope_segment + 2, len(results) - 1)
+    Slope_P3 = min(max_slope_segment + 3, len(results) - 1)
     
     Slope_P1_volt_val = results[Slope_P1]
     Slope_P2_volt_val = results[Slope_P2]
@@ -720,7 +759,13 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
 
     while i < len(candidates):
         idx = candidates[i]
-        if abs(y[idx] - Stable_point) / Stable_point < Tolarance:
+        idx = min(max(0, idx), n - 1)
+        if Stable_point == 0:
+            close_enough = abs(y[idx] - Stable_point) < Tolarance
+        else:
+            close_enough = abs(y[idx] - Stable_point) / abs(Stable_point) < Tolarance
+
+        if close_enough:
             responce_time = idx
             break
         i += 1
@@ -730,48 +775,101 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
         responce_time = Slope_P3_volt_val["segment_end"]
 
 
-    return results, near_zero_slopes, slope_values, responce_time, Responce_times
+    return results, near_zero_slopes, slope_values, responce_time
 
+def calibrate(resistor = 50.0, show_plots = False):
+    """
+    Get all plataue points for each A0 and A1 combination
+    """
+    the_dev = None
+    try:
+        the_dev = IBM4_Lib.Ser_Iface(read_mode = 'DC') # find the first connected IBM4 this can be changed in the IBM4 firmware
+
+        A0 = [0.02, 0.03]
+
+        # Collect response times keyed by input voltage.
+        Responce_time_all = {}
+        
+        for A0_voltage in A0:
+            if 3.2 * 1000.0 / resistor / 87. > A0_voltage : # check if the current is within the range of voltage limit over the resistor
+                response_dict = Read_Waveform_current(
+                    A0_voltage=A0_voltage,
+                    A1_voltage=3.25,
+                    Responce_times=Responce_time_all,
+                    show_plots=show_plots,
+                    the_dev=the_dev
+                )
+                if isinstance(response_dict, dict):
+                    Responce_time_all = response_dict
+                else:
+                    voltage_key = f"{A0_voltage:.3f}V"
+                    Responce_time_all[voltage_key] = numpy.nan
+            else:
+                voltage_key = f"{A0_voltage:.3f}V"
+                Responce_time_all[voltage_key] = numpy.nan
+
+        # Reuse the same open connection to save results.
+        Save_dict_to_IBM4(Responce_time_all, the_dev=the_dev)
+        return Responce_time_all
+    finally:
+        if the_dev is not None:
+            del the_dev
+
+
+
+def Save_dict_to_IBM4(msg_payload=None, the_dev=None):
+    """
+    Send a message payload to the IBM4 firmware.
+
+    Inputs:
+    msg_payload (type: dict | str | None)
+    If None, a default dictionary payload is sent.
+    """
     
+    FUNC_NAME = ".send_message()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    
+    local_dev = None
 
+    try:
+        # instantiate an object that interfaces with the IBM4
+        if the_dev is None:
+            local_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
+            the_dev = local_dev
+        response = the_dev.send_mes(msg=msg_payload)
+        print(response)
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+    finally:
+        if local_dev is not None:
+            del local_dev # destructor for the IBM4 object, closes comms
 
+def Get_cal(Key=None):
+    """
+    Echo the saved data from the IBM4 display.
 
-"""
+    Inputs:
+    Key (type: str | None) optional dictionary key to query.
 
-A0 = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
-A1 = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
+    Returns:
+    str | None: saved payload text/value if present, else None
+    """
+    
+    FUNC_NAME = ".Get_Cal_from_IBM4()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    
+    try:
+        # instantiate an object that interfaces with the IBM4
+        the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
 
-resistor = 50.0  # Ohm
+        response = the_dev.Get_Cal_from_IBM4(key=Key, loud=False)
+        print(response)
 
-
-# Collect response times for each A1 and A0 combination as a 2D array
-Responce_time_all = []
-for A1_voltage in A1:
-    row = []
-    for A0_voltage in A0:
-        if A1_voltage * 1000.0 / resistor > A0_voltage * 87.1:
-            _, _, responce_times = Read_Waveform_current(
-                A0_voltage=A0_voltage,
-                A1_voltage=A1_voltage
-            )
-            # Append only the last response time (scalar)
-            row.append(responce_times[-1] if responce_times else numpy.nan)
-        else:
-            row.append(numpy.nan)
-    Responce_time_all.append(row)
-
-Responce_time_all = numpy.array(Responce_time_all)
-
-# Plotting all response times for each A1
-for i, A1_voltage in enumerate(A1):
-    plt.plot([a0 * 87 for a0 in A0], Responce_time_all[i, :], marker='o', label=f"Voltage limit: {A1_voltage} V")
-
-plt.xlabel("Current (mA)")
-plt.ylabel("Response Time (s)")
-plt.title("Response Time vs Current for Different Voltage Limits with 1% Tolerance")
-plt.legend()
-plt.show()
-plt.show()
-
-
-"""
+       
+        del the_dev # destructor for the IBM4 object, closes comms
+        return response
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+        return None

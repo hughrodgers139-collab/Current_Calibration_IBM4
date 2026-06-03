@@ -68,6 +68,7 @@ import os
 import sys
 import glob
 import re
+import json
 import serial # this package is actually called pyserial, install using py -m pip install pyserial
 import time
 import numpy
@@ -581,7 +582,7 @@ class Ser_Iface(object):
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)    
-            
+
     def DifferentialRead(self, pos_channel, neg_channel, read_type = 'Single Voltage', no_reads = 10):
         
         """
@@ -1614,4 +1615,212 @@ class Ser_Iface(object):
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)    
-        
+
+
+
+
+    def send_mes(self, msg, loud=True):
+        self.FUNC_NAME = ".send_mes()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                payload = json.dumps(msg) if isinstance(msg, dict) else str(msg)
+                write_cmd = 'Message%(v1)s\r\n' % {"v1": payload}
+                self.instr_obj.reset_input_buffer()
+                self.instr_obj.write(str.encode(write_cmd))
+                sent_line = write_cmd.strip()
+                response = ""
+
+                # Some serial stacks echo command text (sometimes partially).
+                # Read several lines and keep the first status-like line.
+                status_prefixes = ('Message saved:', 'ERROR:', 'Unknown problem')
+                fallback_line = ""
+                for _ in range(8):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+                    if not line:
+                        continue
+                    if line == sent_line or line.startswith('Message'):
+                        continue
+                    if line.startswith(status_prefixes):
+                        response = line
+                        break
+                    if not fallback_line:
+                        fallback_line = line
+
+                if not response:
+                    response = fallback_line
+
+                if loud:
+                    print(response)
+                return response
+            else:
+                self.ERR_STATEMENT += '\nCould not write to instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+
+
+    def ReadCurrentWaveform(self, no_reads=100, delay = None, loud=True):
+        """
+        Request the firmware waveform capture from Vin3 and return the parsed samples.
+
+        Inputs:
+        no_reads (type: int) number of samples to capture
+        delay (type: float) delay between samples in seconds
+
+        Outputs:
+        waveform (type: dict | None)
+        waveform["t"] = list of sample timestamps in seconds
+        waveform["y"] = list of sample values
+        """
+
+        self.FUNC_NAME = ".ReadCurrentWaveform()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                delay_val = 0.0 if delay is None else float(delay)
+                write_cmd = 'Waveform:%(v1)d:%(v2)0.5f\r\n' % {"v1": int(no_reads), "v2": delay_val}
+                self.instr_obj.reset_input_buffer()
+                old_timeout = self.instr_obj.timeout
+                self.instr_obj.timeout = 60
+                self.instr_obj.write(str.encode(write_cmd))
+
+                response = ""
+                sent_line = write_cmd.strip()
+                fallback_line = ""
+                for _ in range(200):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+                    if not line:
+                        continue
+                    if line == sent_line or line.startswith('Waveform'):
+                        continue
+                    if (line.startswith('{') and line.endswith('}')) or (line.startswith('[') and line.endswith(']')):
+                        response = line
+                        break
+                    if not fallback_line:
+                        fallback_line = line
+
+                if not response:
+                    response = fallback_line
+
+                self.instr_obj.timeout = old_timeout
+
+                waveform = None
+                try:
+                    parsed = json.loads(response)
+                    if isinstance(parsed, dict):
+                        # Current firmware may return per-run keys like t0.2/v0.2.
+                        if ("t" in parsed and "v" in parsed) or ("t" in parsed and "y" in parsed):
+                            t_vals = parsed.get("t", [])
+                            v_vals = parsed.get("v", parsed.get("y", []))
+                            waveform = {"t": t_vals, "v": v_vals}
+                        else:
+                            has_t_keys = any(str(k).startswith("t") for k in parsed.keys())
+                            has_v_keys = any(str(k).startswith("v") for k in parsed.keys())
+                            if has_t_keys and has_v_keys:
+                                waveform = parsed
+                    elif isinstance(parsed, list):
+                        # Backward compatibility with older firmware that returned only samples.
+                        v = parsed
+                        t = [i * delay_val for i in range(len(v))]
+                        waveform = {"t": t, "v": v}
+                except Exception:
+                    waveform = None
+
+                return waveform
+            else:
+                self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            try:
+                if self.instr_obj is not None and self.instr_obj.isOpen():
+                    self.instr_obj.timeout = self.read_timeout
+            except Exception:
+                pass
+            print(self.ERR_STATEMENT)
+            print(e)
+            return None
+
+
+    def Get_Cal_from_IBM4(self, key=None, loud=True):
+        """
+        Echo the saved data from the IBM4 display.
+
+        Inputs:
+        key (type: str | None) optional dictionary key to request
+
+        Returns:
+        str | None: saved payload text/value if present, else None
+        """
+
+        self.FUNC_NAME = ".echo_IBM4_saved_data()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                # Sending "echo <key>" asks firmware for a specific dictionary value.
+                if key is None:
+                    write_cmd = 'echo\r\n'
+                else:
+                    write_cmd = 'echo %(v1)s\r\n' % {"v1": str(key)}
+                self.instr_obj.reset_input_buffer()
+                self.instr_obj.write(str.encode(write_cmd))
+
+                response = ""
+                sent_line = write_cmd.strip()
+                status_prefixes = (
+                    'Saved message: ',
+                    'Saved value: ',
+                    'No saved message',
+                    'No saved value for key: ',
+                    'ERROR:',
+                    'Unknown problem'
+                )
+                fallback_line = ""
+                for _ in range(8):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+                    if not line:
+                        continue
+                    if line == sent_line or line.startswith('echo'):
+                        continue
+                    if line.startswith(status_prefixes):
+                        response = line
+                        break
+                    if not fallback_line:
+                        fallback_line = line
+
+                if not response:
+                    response = fallback_line
+
+                saved_val = None
+                if response.startswith('Saved message: '):
+                    saved_val = response[len('Saved message: '):]
+                elif response.startswith('Saved value: '):
+                    saved_val = response[len('Saved value: '):]
+                elif response == 'No saved message':
+                    saved_val = None
+                elif response.startswith('No saved value for key: '):
+                    saved_val = None
+
+                if loud:
+                    print(response)
+                return saved_val
+            else:
+                self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+            return None
