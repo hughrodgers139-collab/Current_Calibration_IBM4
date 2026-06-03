@@ -41,5 +41,13 @@ print(pwd)
 
 # Control_Examples.CurCal()
 
-Control_Examples.send_message()
-Control_Examples.Echo()
+Dict = {
+    "key1": "1",
+    "key2": "2",
+    "key3": "3"
+}
+
+
+# Control_Examples.send_message(Dict)
+Control_Examples.Echo(Key = "key2")
+# Control_Examples.Echo(Key = "key1")

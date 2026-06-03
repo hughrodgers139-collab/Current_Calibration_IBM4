@@ -68,6 +68,7 @@ import os
 import sys
 import glob
 import re
+import json
 import serial # this package is actually called pyserial, install using py -m pip install pyserial
 import time
 import numpy
@@ -1626,20 +1627,32 @@ class Ser_Iface(object):
             c1 = self.instr_obj is not None and self.instr_obj.isOpen()
 
             if c1:
-                write_cmd = 'Message%(v1)s\r\n' % {"v1": str(msg)}
+                payload = json.dumps(msg) if isinstance(msg, dict) else str(msg)
+                write_cmd = 'Message%(v1)s\r\n' % {"v1": payload}
                 self.instr_obj.reset_input_buffer()
                 self.instr_obj.write(str.encode(write_cmd))
                 sent_line = write_cmd.strip()
                 response = ""
 
-                # Some firmware/USB stacks echo the command first (e.g. "Message2").
-                # Read a few lines and keep the first non-empty line that is not the echo.
-                for _ in range(4):
+                # Some serial stacks echo command text (sometimes partially).
+                # Read several lines and keep the first status-like line.
+                status_prefixes = ('Message saved:', 'ERROR:', 'Unknown problem')
+                fallback_line = ""
+                for _ in range(8):
                     read_result = self.instr_obj.read_until(b'\n', size=None)
                     line = read_result.decode(errors='replace').strip()
-                    if line and line != sent_line:
+                    if not line:
+                        continue
+                    if line == sent_line or line.startswith('Message'):
+                        continue
+                    if line.startswith(status_prefixes):
                         response = line
                         break
+                    if not fallback_line:
+                        fallback_line = line
+
+                if not response:
+                    response = fallback_line
 
                 if loud:
                     print(response)
@@ -1652,12 +1665,15 @@ class Ser_Iface(object):
             print(e)
 
 
-    def echo_IBM4_saved_data(self, loud=True):
+    def echo_IBM4_saved_data(self, key=None, loud=True):
         """
         Echo the saved data from the IBM4 display.
 
+        Inputs:
+        key (type: str | None) optional dictionary key to request
+
         Returns:
-        str | None: saved payload text if present, else None
+        str | None: saved payload text/value if present, else None
         """
 
         self.FUNC_NAME = ".echo_IBM4_saved_data()"
@@ -1667,24 +1683,49 @@ class Ser_Iface(object):
             c1 = self.instr_obj is not None and self.instr_obj.isOpen()
 
             if c1:
-                # Sending bare "echo" asks firmware to return the saved payload.
-                write_cmd = 'echo\r\n'
+                # Sending "echo <key>" asks firmware for a specific dictionary value.
+                if key is None:
+                    write_cmd = 'echo\r\n'
+                else:
+                    write_cmd = 'echo %(v1)s\r\n' % {"v1": str(key)}
                 self.instr_obj.reset_input_buffer()
                 self.instr_obj.write(str.encode(write_cmd))
 
                 response = ""
                 sent_line = write_cmd.strip()
-                for _ in range(4):
+                status_prefixes = (
+                    'Saved message: ',
+                    'Saved value: ',
+                    'No saved message',
+                    'No saved value for key: ',
+                    'ERROR:',
+                    'Unknown problem'
+                )
+                fallback_line = ""
+                for _ in range(8):
                     read_result = self.instr_obj.read_until(b'\n', size=None)
                     line = read_result.decode(errors='replace').strip()
-                    if line and line != sent_line:
+                    if not line:
+                        continue
+                    if line == sent_line or line.startswith('echo'):
+                        continue
+                    if line.startswith(status_prefixes):
                         response = line
                         break
+                    if not fallback_line:
+                        fallback_line = line
+
+                if not response:
+                    response = fallback_line
 
                 saved_val = None
                 if response.startswith('Saved message: '):
                     saved_val = response[len('Saved message: '):]
+                elif response.startswith('Saved value: '):
+                    saved_val = response[len('Saved value: '):]
                 elif response == 'No saved message':
+                    saved_val = None
+                elif response.startswith('No saved value for key: '):
                     saved_val = None
 
                 if loud:

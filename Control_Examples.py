@@ -666,8 +666,7 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
             # R²
             ss_res = numpy.sum((y_seg - y_pred)**2)
             ss_tot = numpy.sum((y_seg - y_mean)**2)
-            r2 = 1 - ss_res / ss_tot if ss_tot != 0 else 0
-        # ------------------------------------------------------------------------------------------------------------------------
+            r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
 
         results.append({
             "segment_start": start,
@@ -783,9 +782,13 @@ plt.show()
 """
 
 
-def send_message():
+def send_message(msg_payload=None):
     """
-    Send a message to the IBM4 display
+    Send a message payload to the IBM4 firmware.
+
+    Inputs:
+    msg_payload (type: dict | str | None)
+    If None, a default dictionary payload is sent.
     """
     
     FUNC_NAME = ".send_message()"
@@ -796,7 +799,13 @@ def send_message():
         the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
         print("\n")
 
-        response = the_dev.send_mes(msg="Hello, IBM4!")
+        if msg_payload is None:
+            msg_payload = {
+                "message": "Hello World",
+                "source": "Control_Examples.send_message"
+            }
+        response = the_dev.send_mes(msg=msg_payload)
+        print(response)
 
         print("\n")
        
@@ -806,9 +815,12 @@ def send_message():
         print(e)
 
 
-def Echo():
+def Echo(Key=None):
     """
-    Echo the saved data from the IBM4 display
+    Echo the saved data from the IBM4 display.
+
+    Inputs:
+    Key (type: str | None) optional dictionary key to query.
     """
     
     FUNC_NAME = ".echo_IBM4_saved_data()"
@@ -819,7 +831,8 @@ def Echo():
         the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
         print("\n")
 
-        response = the_dev.echo_IBM4_saved_data()
+        response = the_dev.echo_IBM4_saved_data(key=Key, loud=False)
+        print(response)
 
         print("\n")
        
