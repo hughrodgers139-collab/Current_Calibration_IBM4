@@ -1686,14 +1686,17 @@ class Ser_Iface(object):
             c1 = self.instr_obj is not None and self.instr_obj.isOpen()
 
             if c1:
-                write_cmd = 'Waveform:%(v1)d:%(v2)0.5f\r\n' % {"v1": int(no_reads), "v2": float(delay)}
+                delay_val = 0.0 if delay is None else float(delay)
+                write_cmd = 'Waveform:%(v1)d:%(v2)0.5f\r\n' % {"v1": int(no_reads), "v2": delay_val}
                 self.instr_obj.reset_input_buffer()
+                old_timeout = self.instr_obj.timeout
+                self.instr_obj.timeout = 60
                 self.instr_obj.write(str.encode(write_cmd))
 
                 response = ""
                 sent_line = write_cmd.strip()
                 fallback_line = ""
-                for _ in range(8):
+                for _ in range(200):
                     read_result = self.instr_obj.read_until(b'\n', size=None)
                     line = read_result.decode(errors='replace').strip()
                     if not line:
@@ -1709,33 +1712,46 @@ class Ser_Iface(object):
                 if not response:
                     response = fallback_line
 
+                self.instr_obj.timeout = old_timeout
+
                 waveform = None
                 try:
                     parsed = json.loads(response)
-                    if isinstance(parsed, dict) and "t" in parsed and "y" in parsed:
-                        waveform = {"t": parsed["t"], "y": parsed["y"]}
+                    if isinstance(parsed, dict):
+                        # Current firmware may return per-run keys like t0.2/v0.2.
+                        if ("t" in parsed and "v" in parsed) or ("t" in parsed and "y" in parsed):
+                            t_vals = parsed.get("t", [])
+                            v_vals = parsed.get("v", parsed.get("y", []))
+                            waveform = {"t": t_vals, "v": v_vals}
+                        else:
+                            has_t_keys = any(str(k).startswith("t") for k in parsed.keys())
+                            has_v_keys = any(str(k).startswith("v") for k in parsed.keys())
+                            if has_t_keys and has_v_keys:
+                                waveform = parsed
                     elif isinstance(parsed, list):
                         # Backward compatibility with older firmware that returned only samples.
-                        y = parsed
-                        t = [i * float(delay) for i in range(len(y))]
-                        waveform = {"t": t, "y": y}
+                        v = parsed
+                        t = [i * delay_val for i in range(len(v))]
+                        waveform = {"t": t, "v": v}
                 except Exception:
                     waveform = None
-
-                # if loud:
-                    # print(response)
 
                 return waveform
             else:
                 self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
                 raise Exception
         except Exception as e:
+            try:
+                if self.instr_obj is not None and self.instr_obj.isOpen():
+                    self.instr_obj.timeout = self.read_timeout
+            except Exception:
+                pass
             print(self.ERR_STATEMENT)
             print(e)
             return None
 
 
-    def echo_IBM4_saved_data(self, key=None, loud=True):
+    def Get_Cal_from_IBM4(self, key=None, loud=True):
         """
         Echo the saved data from the IBM4 display.
 

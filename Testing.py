@@ -6,14 +6,18 @@ R. Sheehan 19 - 9 - 2024
 """
 
 import os
-import Control_Examples
+import Control_Examples as CE
 
+import numpy
+import matplotlib.pyplot as plt
+import json
+import ast
 # Where are you? 
 pwd = os.getcwd()
 
 # print(pwd)
 
-
+print("\n")
 # 0. Basic Find, Open, Close
 # Control_Examples.Simple_Open_Close()
 
@@ -41,24 +45,11 @@ pwd = os.getcwd()
 
 # Control_Examples.CurCal()
 
-Dict = {
-    "key1": "1",
-}
 
-# Control_Examples.Read_Current_waveform(no_reads=100)
-# Control_Examples.send_message(Dict)
-# Control_Examples.Echo(Key = "key1")
-times, samples = Control_Examples.Read_Current_waveform(no_reads=100, delay=0.0005)
-import matplotlib.pyplot as plt
+# Control_Examples.Read_Current_waveform(no_reads=100, delay=0.0005)
 
-if times is not None and samples is not None:
-    n = min(len(times), len(samples))
-    if n > 0:
-        t_plot = times[:n]
-        y_plot = samples[:n]
-        plt.plot(t_plot, y_plot)
-        plt.xlabel("Time (s)")
-        plt.ylabel("Voltage (V)")
-        plt.title("Vin3 Waveform vs Time")
-        plt.show()
 
+CE.calibrate(resistor=50, show_plots=True)
+
+# CE.Get_cal(Key="")
+print("\n")

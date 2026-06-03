@@ -91,47 +91,24 @@ def Simple_Read():
         print(e)
 
 
-def set_current():
-
-    pass
-
-def Read_Current_waveform(no_reads=100, delay=0.0, A0_voltage=0.03, A1_voltage=3.2):
-    no_reads = int(no_reads)
-    if no_reads < 1:
-        no_reads = 1
-
-    # Configure analog outputs before sampling, similar to the PC-side waveform flow.
-    if 0.0 <= A0_voltage <= Vmax:
-        Vout0.value = dac_value(A0_voltage)
-    if 0.0 <= A1_voltage <= Vmax:
-        Vout1.value = dac_value(A1_voltage)
-
-    samples = [0.0] * no_reads
-    times = [0.0] * no_reads
-    start = time.monotonic()
-
-    for i in range(no_reads):
-        times[i] = time.monotonic() - start
-        samples[i] = get_voltage(Vin3)
-        if delay > 0.0:
-            time.sleep(delay)
-
-    payload = {"t": times, "y": samples}
-    # Print a machine-readable line for the host and return waveform payload.
-    # print(json.dumps(payload))
-    return payload
-
-
-
-def Saved_Values(payload):
-    # Store message in NVM: bytes 0-1 = length (little-endian), bytes 2+ = UTF-8 data
+def Save_Values(payload):
+    # Store full payload to filesystem and mirror to NVM when possible.
     try:
-        nvm = microcontroller.nvm
         if isinstance(payload, dict):
-            # Serialize dictionaries explicitly so they can be reconstructed later.
             msg_txt = json.dumps(payload)
         else:
             msg_txt = str(payload)
+
+        file_saved = False
+        try:
+            with open("/saved_payload.json", "w") as fp:
+                fp.write(msg_txt)
+            file_saved = True
+        except Exception:
+            file_saved = False
+
+        nvm_saved = False
+        nvm = microcontroller.nvm
         msg = msg_txt.encode('utf-8')
         n = len(msg)
         max_len = len(nvm) - 2
@@ -141,23 +118,37 @@ def Saved_Values(payload):
         nvm[0] = n & 0xFF
         nvm[1] = (n >> 8) & 0xFF
         nvm[2:2 + n] = msg
-        return True
+        nvm_saved = True
+
+        return file_saved or nvm_saved
     except Exception as ex:
         print('ERROR: Save_Message failed')
         print(ex)
         return False
 
-
-def Load_Dictionary(key=None):
-    # Read message from NVM: bytes 0-1 = length (little-endian), bytes 2+ = UTF-8 data
+def Get_saved_value(key=None):
+    # Read full payload from filesystem first, then fall back to NVM.
     try:
-        nvm = microcontroller.nvm
-        n = nvm[0] | (nvm[1] << 8)
-        max_len = len(nvm) - 2
-        if n == 0 or n > max_len:
+        decoded = None
+
+        try:
+            with open("/saved_payload.json", "r") as fp:
+                decoded = fp.read()
+        except Exception:
+            decoded = None
+
+        if not decoded:
+            # Fallback to NVM: bytes 0-1 = length (little-endian), bytes 2+ = UTF-8 data
+            nvm = microcontroller.nvm
+            n = nvm[0] | (nvm[1] << 8)
+            max_len = len(nvm) - 2
+            if n == 0 or n > max_len:
+                return None
+            data = bytes(nvm[2:2 + n])
+            decoded = data.decode('utf-8')
+
+        if not decoded:
             return None
-        data = bytes(nvm[2:2 + n])
-        decoded = data.decode('utf-8')
 
         try:
             parsed = json.loads(decoded)
@@ -524,28 +515,6 @@ while True:
         elif command.startswith("l"):
             Simple_Read()
 
-        elif command.startswith("Waveform") or command.startswith("Read_Current_waveform"):
-            try:
-                tokens = command.split(":")
-                no_reads = int(tokens[1]) if len(tokens) > 1 and tokens[1] else 100
-                delay = float(tokens[2]) if len(tokens) > 2 and tokens[2] else 0.01
-                A0_voltage = float(tokens[3]) if len(tokens) > 3 and tokens[3] else 0.03
-                A1_voltage = float(tokens[4]) if len(tokens) > 4 and tokens[4] else 3.25
-                Read_Current_waveform(
-                    no_reads=no_reads,
-                    delay=delay,
-                    A0_voltage=A0_voltage,
-                    A1_voltage=A1_voltage,
-                )
-            except ValueError as ex:
-                print('Waveform command must be Waveform:<reads>:<delay>:<A0_voltage>:<A1_voltage>')
-                print(ex)
-            except Exception as ex:
-                print('Unknown problem, waveform command not received')
-                print(ex)
-        
-
-
         elif command.startswith("Message"):
             try:
                 payload = command[len("Message"):].strip()
@@ -561,13 +530,13 @@ while True:
                         except Exception:
                             payload_to_save = payload
 
-                    ok = Saved_Values(payload_to_save)
+                    ok = Save_Values(payload_to_save)
                     if ok:
                         print('Message saved: ' + payload)
                     else:
                         print('ERROR: Could not save message')
                 else:
-                    saved = Load_Dictionary()
+                    saved = Get_saved_value()
                     if saved is None:
                         print('No saved message')
                     else:
@@ -582,7 +551,7 @@ while True:
             try:
                 # Echo the saved payload, or a specific key if one is provided.
                 key = command[len("echo"):].strip()
-                payload = Load_Dictionary(key) if key else Load_Dictionary()
+                payload = Get_saved_value(key) if key else Get_saved_value()
                 if payload is None:
                     if key:
                         print('No saved value for key: ' + key)
