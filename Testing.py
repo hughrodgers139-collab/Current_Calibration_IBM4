@@ -19,37 +19,36 @@ pwd = os.getcwd()
 
 print("\n")
 # 0. Basic Find, Open, Close
-# Control_Examples.Simple_Open_Close()
+# CE.Simple_Open_Close()
 
 # 1. Step through voltages
-#Control_Examples.Step_Through_Voltages()
+#CE.Step_Through_Voltages()
 
 # 2. Basic single channel sweep
-#Control_Examples.Simple_Sweep()
+# CE.Simple_Sweep()
 
 # 3. Read all input channels
-#Control_Examples.Simple_Sweep_Read_All()
+# CE.Simple_Sweep_Read_All()
 
 # 4. Differential read
-#Control_Examples.Differential_Readings()
+# CE.Differential_Readings()
 
 # 5. Multi-reads and timings
-#Control_Examples.Multiple_Readings()
+# CE.Multiple_Readings()
 
 # 6. Multimeter mode
-# Control_Examples.Multimeter_Mode()
+# CE.Multimeter_Mode()
 
 # 7. Linear single channel sweep
-# Control_Examples.Linear_Sweep_V1()
-# Control_Examples.Linear_Sweep_V2()
-
-# Control_Examples.CurCal()
+# CE.Linear_Sweep_V1()
+# CE.Linear_Sweep_V2()
 
 
-# Control_Examples.Read_Current_waveform(no_reads=100, delay=0.0005)
+# CE.calibrate(resistor=50, show_plots=False)
+
+CE.Get_cal()
 
 
-CE.calibrate(resistor=50, show_plots=True)
 
-# CE.Get_cal(Key="")
 print("\n")
+

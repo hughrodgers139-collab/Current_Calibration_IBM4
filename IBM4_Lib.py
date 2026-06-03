@@ -174,29 +174,6 @@ class Ser_Iface(object):
         
         return "class for interfacing to an IBM4"
     
-    # def ResetBuffer(self):
-    #     # DEPRECATED - METHOD DOES NOT PERFORM AS REQUIRED
-    #     """
-    #     In order to be able to sweep correctly the buffer must be reset between write, read command pairs
-    #     """
-
-    #     # I'm not sure if this method actually does anything
-    #     # R. Sheehan 12 - 12 - 2024
-
-    #     self.FUNC_NAME = ".ResetBuffer()" # use this in exception handling messages
-    #     self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-    #     try:            
-    #         # confirm that the instrument object has been instantiated
-    #         if self.instr_obj.isOpen():
-    #             self.instr_obj.reset_input_buffer() # this appears to have no effect
-    #             self.instr_obj.reset_output_buffer() # this appears to have no effect
-    #         else:
-    #             self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not read from instrument\nNo comms established'
-    #             raise Exception
-    #     except Exception as e:
-    #         print(self.ERR_STATEMENT)
-    #         print(e)
 
     def CommsStatus(self, loud = False):
         """
@@ -1320,8 +1297,7 @@ class Ser_Iface(object):
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
-            self.WriteVoltage('A0', set_voltage =  0.0)
-            self.WriteVoltage('A1', set_voltage =  0.0)
+            self.ZeroIBM4()
             time.sleep(0.5)
             self.WriteVoltage('A0', set_voltage =  A0_voltage)
             self.WriteVoltage('A1', set_voltage =  A1_voltage)
@@ -1435,6 +1411,7 @@ class Ser_Iface(object):
         print('Differential Read Value = %(v1)0.3f +/- %(v2)0.3f (V)'%{"v1":diff_res[0], "v2":diff_res[1]})
         
     # methods for initiating voltage sweeps
+
     def SingleChannelSweepA(self, swp_channel, v_strt, v_end, no_steps, v_fixed = 0.0, no_averages = 10):
     
         """
@@ -1616,9 +1593,7 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)    
 
-
-
-
+    # writing and reading data from IBM4 
     def send_mes(self, msg, loud=True):
         self.FUNC_NAME = ".send_mes()"
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
@@ -1664,92 +1639,110 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-
-    def ReadCurrentWaveform(self, no_reads=100, delay = None, loud=True):
+    def SingleChannelSweepC(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, resistor = 50, waveform_plataue_times = None):
+    
         """
-        Request the firmware waveform capture from Vin3 and return the parsed samples.
+        Enable the microcontroller to perform a linear sweep of measurements using a single channel
+        start at v_strt, set voltage, read inputs, increment_voltage, return voltage readings at all inputs
+        format the voltage readings after the fact
+    
+        swp_channel is the channel being used as a voltage source
+        voltage_interval describes the voltage sweep space
+        v_fixed is the constant voltage to be output by the channel that is NOT being swept
+        caveat emptor no_steps is constrained by fact that smallest voltage increment is 0.01V
 
-        Inputs:
-        no_reads (type: int) number of samples to capture
-        delay (type: float) delay between samples in seconds
-
-        Outputs:
-        waveform (type: dict | None)
-        waveform["t"] = list of sample timestamps in seconds
-        waveform["y"] = list of sample values
+        Output is a numpy array of the form
+        [v_set, A2, A3, A4, A5, D2]
         """
 
-        self.FUNC_NAME = ".ReadCurrentWaveform()"
+        # Notes on syntax for passing a class as an argument
+        # https://stackoverflow.com/questions/4501403/class-as-an-input-in-a-function
+        # https://www.reddit.com/r/learnpython/comments/12fk1we/pass_class_as_argument_to_another_class/?rdt=50057
+        # R. Sheehan 22 - 7 - 2024
+
+        # this version makes use of the Sweep_Interval object
+        # the thinking behind this is that it would make it easier to write a two-channel sweep, e.g. BJT characterisation
+        # you could write a method that could take two SweepInterval objects as inputs to manage
+        # the sweep paramters, it would be cleaner than having 6 parameters which you would otherwise need
+        # the two channel sweep would then be a nested loop; outer loop over v_fixed, inner loop assuming constant v_fixed
+        # It would be easy to implement, the issue is that the data handling becomes a bit of pain
+        # You'd end up with an unwieldy array that may be difficult for people to comprehend
+        # Output array would look something like [v_set, A21, A31, A41, A51, D21, A22, A32, A42, A52, D22, ..., A2n, A3n, A4n, A5n, D2n]
+        # Might not be too bad if I wrote another method to help the user unpack the A2x, A3x, A4x, A5x, D2x readings
+        # R. Sheehan 23 - 7 - 2024
+
+
+        self.FUNC_NAME = ".SingleChannelSweepC()" # use this in exception handling messages
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
-        try:
-            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+        try:       
+            c1 = self.instr_obj.isOpen() # confirm that the intstrument object has been instantiated
+            c2 = True if swp_channel in self.Write_Chnnls else False # confirm that the output channel label is correct             
+            c3 = voltage_interval.defined # check that the parameters in the interval have been defined correctly
+            c7 = True if no_averages > 3 and no_averages < 103 else False # confirm that no. averages being taken is a sensible value
+            c8 = True if v_fixed >= self.VMIN and v_fixed <= self.VMAX else False # confirm that the fixed voltage is in range
+            c11 = True if v_fixed * 1000.0 / resistor > voltage_interval.stop * 87 else False
+            c10 = c1 and c2 and c3 and c7 and c8 and c11
+        
+            if c10:
+                # Set the voltage on the channel that is NOT sweeping
+                fixed_channel = 'A1' if swp_channel == 'A0' else 'A0'
+                self.WriteVoltage(fixed_channel, v_fixed)
+                # Proceed with the single channel linear voltage sweep
 
-            if c1:
-                delay_val = 0.0 if delay is None else float(delay)
-                write_cmd = 'Waveform:%(v1)d:%(v2)0.5f\r\n' % {"v1": int(no_reads), "v2": delay_val}
-                self.instr_obj.reset_input_buffer()
-                old_timeout = self.instr_obj.timeout
-                self.instr_obj.timeout = 60
-                self.instr_obj.write(str.encode(write_cmd))
 
-                response = ""
-                sent_line = write_cmd.strip()
-                fallback_line = ""
-                for _ in range(200):
-                    read_result = self.instr_obj.read_until(b'\n', size=None)
-                    line = read_result.decode(errors='replace').strip()
-                    if not line:
-                        continue
-                    if line == sent_line or line.startswith('Waveform'):
-                        continue
-                    if (line.startswith('{') and line.endswith('}')) or (line.startswith('[') and line.endswith(']')):
-                        response = line
-                        break
-                    if not fallback_line:
-                        fallback_line = line
+                voltage_data = numpy.array([]) # instantiate an empty numpy array to store the sweep data
+                v_set = voltage_interval.start # initialise the set-voltage
+                # perform the sweep
+                print('\nLinear Sweep in Progress')
+                print('Sweeping voltage on Analog Output:',swp_channel)
+                print('Fixed voltage of',v_fixed,'(V) on Analog Output:',fixed_channel,'\n')
+                count = 0
+                #while v_set < voltage_interval.stop:
 
-                if not response:
-                    response = fallback_line
 
-                self.instr_obj.timeout = old_timeout
+                for i in range(0, voltage_interval.Nsteps, 1):
+                    step_data = numpy.array([]) # instantiate an empty numpy array to hold the data for each step of the sweep
+                    self.WriteVoltage(swp_channel, v_set) # set the voltage at the analog output channel
 
-                waveform = None
-                try:
-                    parsed = json.loads(response)
-                    if isinstance(parsed, dict):
-                        # Current firmware may return per-run keys like t0.2/v0.2.
-                        if ("t" in parsed and "v" in parsed) or ("t" in parsed and "y" in parsed):
-                            t_vals = parsed.get("t", [])
-                            v_vals = parsed.get("v", parsed.get("y", []))
-                            waveform = {"t": t_vals, "v": v_vals}
-                        else:
-                            has_t_keys = any(str(k).startswith("t") for k in parsed.keys())
-                            has_v_keys = any(str(k).startswith("v") for k in parsed.keys())
-                            if has_t_keys and has_v_keys:
-                                waveform = parsed
-                    elif isinstance(parsed, list):
-                        # Backward compatibility with older firmware that returned only samples.
-                        v = parsed
-                        t = [i * delay_val for i in range(len(v))]
-                        waveform = {"t": t, "v": v}
-                except Exception:
-                    waveform = None
+                    if waveform_plataue_times is not None:
+                        plateau_key = min((key for key in waveform_plataue_times if key > v_set), default=None)
+                        if plateau_key is not None:
+                            time.sleep(waveform_plataue_times[plateau_key]) # Apply the matching plateau delay
+                            print(f'Applied plateau delay of {waveform_plataue_times[plateau_key]} seconds for voltage {v_set} V')
+                    else:
+                        time.sleep(waveform_plataue_times[plateau_key.stop]) # Apply a fixed delay
 
-                return waveform
+                    chnnl_values = self.ReadAverageVoltageAllChnnl(no_averages) # read the averaged voltages at all analog input channels
+                    # save the data
+                    step_data = numpy.append(step_data, v_set) # store the set-voltage value for this step
+                    step_data = numpy.append(step_data, chnnl_values) # store the  measured voltage values from all channels for this step
+                    # store the  set-voltage and the measured voltage values from all channels for this step
+                    # use append on the first step to initialise the voltage_data array
+                    # use vstack on subsequent steps to build up the 2D array of data
+                    voltage_data = numpy.append(voltage_data, step_data) if count == 0 else numpy.vstack([voltage_data, step_data])
+                    v_set = v_set + voltage_interval.delta # increment the set-voltage
+                    count = count + 1 if count == 0 else count # only need to increment count once to build up the array
+                print('Sweep complete')
+                self.ZeroIBM4() # ground the analog outputs
+                return voltage_data
             else:
-                self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
-                raise Exception
+                if not c1:
+                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nNo comms established'
+                if not c2:
+                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\noutput_channel outside range {A0, A1}'
+                if not c3:
+                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nvoltage sweep bounds not defined'
+                if not c7:
+                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nn_averages not defined correctly'
+                if not c8:
+                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nv_fixed not in the correct range'
+                if not c11:
+                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nvoltage limit exceeds v_fixed'
+                raise Exception        
         except Exception as e:
-            try:
-                if self.instr_obj is not None and self.instr_obj.isOpen():
-                    self.instr_obj.timeout = self.read_timeout
-            except Exception:
-                pass
             print(self.ERR_STATEMENT)
-            print(e)
-            return None
-
+            print(e)   
 
     def Get_Cal_from_IBM4(self, key=None, loud=True):
         """
@@ -1771,9 +1764,9 @@ class Ser_Iface(object):
             if c1:
                 # Sending "echo <key>" asks firmware for a specific dictionary value.
                 if key is None:
-                    write_cmd = 'echo\r\n'
+                    write_cmd = 'Get_cal\r\n'
                 else:
-                    write_cmd = 'echo %(v1)s\r\n' % {"v1": str(key)}
+                    write_cmd = 'Get_cal %(v1)s\r\n' % {"v1": str(key)}
                 self.instr_obj.reset_input_buffer()
                 self.instr_obj.write(str.encode(write_cmd))
 
