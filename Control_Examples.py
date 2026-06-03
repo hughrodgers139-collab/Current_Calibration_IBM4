@@ -48,6 +48,8 @@ def Simple_Open_Close():
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
+        return None, None
+        return None, None
 
 def Step_Through_Voltages():
     """
@@ -96,6 +98,7 @@ def Step_Through_Voltages():
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
+        return None, None
 
 def Simple_Sweep():
     """
@@ -353,6 +356,31 @@ def Read_Waveform():
 
         
         del the_dev # destructor for the IBM4 object, closes comms
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+
+
+def Read_Current_waveform(no_reads=100, delay=None):
+    """
+    Request and print a waveform captured on Vin3 from the IBM4 firmware.
+    """
+
+    FUNC_NAME = ".Read_Current_waveform()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+
+    try:
+        the_dev = IBM4_Lib.Ser_Iface(read_mode='DC')
+        waveform = the_dev.ReadCurrentWaveform(no_reads=no_reads, delay=delay, loud=False)
+        if waveform is None:
+            print("No waveform returned")
+            del the_dev
+            return None, None
+        times = waveform.get("t", [])
+        samples = waveform.get("y", [])
+
+        del the_dev
+        return times, samples
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
@@ -744,42 +772,42 @@ def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_volt
 
 
 
-"""
-A0 = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
-A1 = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
 
-resistor = 50.0  # Ohm
+if __name__ == "__main__":
+    A0 = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
+    A1 = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.3]
 
+    resistor = 50.0  # Ohm
 
-# Collect response times for each A1 and A0 combination as a 2D array
-Responce_time_all = []
-for A1_voltage in A1:
-    row = []
-    for A0_voltage in A0:
-        if A1_voltage * 1000.0 / resistor > A0_voltage * 87.1:
-            _, _, responce_times = Read_Waveform_current(
-                A0_voltage=A0_voltage,
-                A1_voltage=A1_voltage
-            )
-            # Append only the last response time (scalar)
-            row.append(responce_times[-1] if responce_times else numpy.nan)
-        else:
-            row.append(numpy.nan)
-    Responce_time_all.append(row)
+    # Collect response times for each A1 and A0 combination as a 2D array
+    Responce_time_all = []
+    for A1_voltage in A1:
+        row = []
+        for A0_voltage in A0:
+            if A1_voltage * 1000.0 / resistor > A0_voltage * 87.1:
+                _, _, responce_times = Read_Waveform_current(
+                    A0_voltage=A0_voltage,
+                    A1_voltage=A1_voltage
+                )
+                # Append only the last response time (scalar)
+                row.append(responce_times[-1] if responce_times else numpy.nan)
+            else:
+                row.append(numpy.nan)
+        Responce_time_all.append(row)
 
-Responce_time_all = numpy.array(Responce_time_all)
+    Responce_time_all = numpy.array(Responce_time_all)
 
-# Plotting all response times for each A1
-for i, A1_voltage in enumerate(A1):
-    plt.plot([a0 * 87 for a0 in A0], Responce_time_all[i, :], marker='o', label=f"Voltage limit: {A1_voltage} V")
+    # Plotting all response times for each A1
+    for i, A1_voltage in enumerate(A1):
+        plt.plot([a0 * 87 for a0 in A0], Responce_time_all[i, :], marker='o', label=f"Voltage limit: {A1_voltage} V")
 
-plt.xlabel("Current (mA)")
-plt.ylabel("Response Time (s)")
-plt.title("Response Time vs Current for Different Voltage Limits with 1% Tolerance")
-plt.legend()
-plt.show()
-plt.show()
-"""
+    plt.xlabel("Current (mA)")
+    plt.ylabel("Response Time (s)")
+    plt.title("Response Time vs Current for Different Voltage Limits with 1% Tolerance")
+    plt.legend()
+    plt.show()
+    plt.show()
+
 
 
 def send_message(msg_payload=None):
@@ -798,16 +826,8 @@ def send_message(msg_payload=None):
         # instantiate an object that interfaces with the IBM4
         the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
         print("\n")
-
-        if msg_payload is None:
-            msg_payload = {
-                "message": "Hello World",
-                "source": "Control_Examples.send_message"
-            }
         response = the_dev.send_mes(msg=msg_payload)
         print(response)
-
-        print("\n")
        
         del the_dev # destructor for the IBM4 object, closes comms
     except Exception as e:

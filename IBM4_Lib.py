@@ -1665,6 +1665,76 @@ class Ser_Iface(object):
             print(e)
 
 
+    def ReadCurrentWaveform(self, no_reads=100, delay = None, loud=True):
+        """
+        Request the firmware waveform capture from Vin3 and return the parsed samples.
+
+        Inputs:
+        no_reads (type: int) number of samples to capture
+        delay (type: float) delay between samples in seconds
+
+        Outputs:
+        waveform (type: dict | None)
+        waveform["t"] = list of sample timestamps in seconds
+        waveform["y"] = list of sample values
+        """
+
+        self.FUNC_NAME = ".ReadCurrentWaveform()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                write_cmd = 'Waveform:%(v1)d:%(v2)0.5f\r\n' % {"v1": int(no_reads), "v2": float(delay)}
+                self.instr_obj.reset_input_buffer()
+                self.instr_obj.write(str.encode(write_cmd))
+
+                response = ""
+                sent_line = write_cmd.strip()
+                fallback_line = ""
+                for _ in range(8):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+                    if not line:
+                        continue
+                    if line == sent_line or line.startswith('Waveform'):
+                        continue
+                    if (line.startswith('{') and line.endswith('}')) or (line.startswith('[') and line.endswith(']')):
+                        response = line
+                        break
+                    if not fallback_line:
+                        fallback_line = line
+
+                if not response:
+                    response = fallback_line
+
+                waveform = None
+                try:
+                    parsed = json.loads(response)
+                    if isinstance(parsed, dict) and "t" in parsed and "y" in parsed:
+                        waveform = {"t": parsed["t"], "y": parsed["y"]}
+                    elif isinstance(parsed, list):
+                        # Backward compatibility with older firmware that returned only samples.
+                        y = parsed
+                        t = [i * float(delay) for i in range(len(y))]
+                        waveform = {"t": t, "y": y}
+                except Exception:
+                    waveform = None
+
+                # if loud:
+                    # print(response)
+
+                return waveform
+            else:
+                self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+            return None
+
+
     def echo_IBM4_saved_data(self, key=None, loud=True):
         """
         Echo the saved data from the IBM4 display.

@@ -11,7 +11,7 @@ import Control_Examples
 # Where are you? 
 pwd = os.getcwd()
 
-print(pwd)
+# print(pwd)
 
 
 # 0. Basic Find, Open, Close
@@ -43,11 +43,22 @@ print(pwd)
 
 Dict = {
     "key1": "1",
-    "key2": "2",
-    "key3": "3"
 }
 
-
+# Control_Examples.Read_Current_waveform(no_reads=100)
 # Control_Examples.send_message(Dict)
-Control_Examples.Echo(Key = "key2")
 # Control_Examples.Echo(Key = "key1")
+times, samples = Control_Examples.Read_Current_waveform(no_reads=100, delay=0.0005)
+import matplotlib.pyplot as plt
+
+if times is not None and samples is not None:
+    n = min(len(times), len(samples))
+    if n > 0:
+        t_plot = times[:n]
+        y_plot = samples[:n]
+        plt.plot(t_plot, y_plot)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Voltage (V)")
+        plt.title("Vin3 Waveform vs Time")
+        plt.show()
+

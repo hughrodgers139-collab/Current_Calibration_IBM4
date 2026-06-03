@@ -91,6 +91,36 @@ def Simple_Read():
         print(e)
 
 
+def set_current():
+
+    pass
+
+def Read_Current_waveform(no_reads=100, delay=0.0, A0_voltage=0.03, A1_voltage=3.2):
+    no_reads = int(no_reads)
+    if no_reads < 1:
+        no_reads = 1
+
+    # Configure analog outputs before sampling, similar to the PC-side waveform flow.
+    if 0.0 <= A0_voltage <= Vmax:
+        Vout0.value = dac_value(A0_voltage)
+    if 0.0 <= A1_voltage <= Vmax:
+        Vout1.value = dac_value(A1_voltage)
+
+    samples = [0.0] * no_reads
+    times = [0.0] * no_reads
+    start = time.monotonic()
+
+    for i in range(no_reads):
+        times[i] = time.monotonic() - start
+        samples[i] = get_voltage(Vin3)
+        if delay > 0.0:
+            time.sleep(delay)
+
+    payload = {"t": times, "y": samples}
+    # Print a machine-readable line for the host and return waveform payload.
+    # print(json.dumps(payload))
+    return payload
+
 
 
 def Saved_Values(payload):
@@ -493,7 +523,27 @@ while True:
             Simple_Vout_A1(command)
         elif command.startswith("l"):
             Simple_Read()
-        # """
+
+        elif command.startswith("Waveform") or command.startswith("Read_Current_waveform"):
+            try:
+                tokens = command.split(":")
+                no_reads = int(tokens[1]) if len(tokens) > 1 and tokens[1] else 100
+                delay = float(tokens[2]) if len(tokens) > 2 and tokens[2] else 0.01
+                A0_voltage = float(tokens[3]) if len(tokens) > 3 and tokens[3] else 0.03
+                A1_voltage = float(tokens[4]) if len(tokens) > 4 and tokens[4] else 3.25
+                Read_Current_waveform(
+                    no_reads=no_reads,
+                    delay=delay,
+                    A0_voltage=A0_voltage,
+                    A1_voltage=A1_voltage,
+                )
+            except ValueError as ex:
+                print('Waveform command must be Waveform:<reads>:<delay>:<A0_voltage>:<A1_voltage>')
+                print(ex)
+            except Exception as ex:
+                print('Unknown problem, waveform command not received')
+                print(ex)
+        
 
 
         elif command.startswith("Message"):
