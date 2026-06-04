@@ -1275,10 +1275,7 @@ class Ser_Iface(object):
             print(e)
 
     def output_voltage(self, A0_voltage, A1_voltage):
-    
-   
-
-        self.output_voltage = ".output_voltage()" # use this in exception handling messages
+        self.FUNC_NAME = ".output_voltage()" # use this in exception handling messages
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
@@ -1289,11 +1286,8 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-    def output_voltage_zero_to_hero(self, A0_voltage, A1_voltage):
-    
-   
-
-        self.output_voltage = ".output_voltage()" # use this in exception handling messages
+    def Output_voltage_from_zero(self, A0_voltage, A1_voltage):
+        self.FUNC_NAME = ".Output_voltage_from_zero()" # use this in exception handling messages
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
@@ -1594,6 +1588,7 @@ class Ser_Iface(object):
             print(e)    
 
     # writing and reading data from IBM4 
+    
     def send_mes(self, msg, loud=True):
         self.FUNC_NAME = ".send_mes()"
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
@@ -1709,7 +1704,7 @@ class Ser_Iface(object):
                         plateau_key = min((key for key in waveform_plataue_times if key > v_set), default=None)
                         if plateau_key is not None:
                             time.sleep(waveform_plataue_times[plateau_key]) # Apply the matching plateau delay
-                            print(f'Applied plateau delay of {waveform_plataue_times[plateau_key]} seconds for voltage {v_set} V')
+                            print(f'{v_set:.4f} V - delay of {waveform_plataue_times[plateau_key]:.2f} seconds ')
                     else:
                         time.sleep(waveform_plataue_times[plateau_key.stop]) # Apply a fixed delay
 
