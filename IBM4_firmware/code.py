@@ -515,6 +515,7 @@ while True:
         elif command.startswith("l"):
             Simple_Read()
 
+
         elif command.startswith("Message"):
             try:
                 payload = command[len("Message"):].strip()
@@ -546,11 +547,10 @@ while True:
                 print('Unknown problem, Message command not received')
                 print(ex)
 
-
-        elif command.startswith("echo"):
+        elif command.startswith("Get_cal"):
             try:
                 # Echo the saved payload, or a specific key if one is provided.
-                key = command[len("echo"):].strip()
+                key = command[len("Get_cal"):].strip()
                 payload = Get_saved_value(key) if key else Get_saved_value()
                 if payload is None:
                     if key:
@@ -565,11 +565,9 @@ while True:
             except Exception as ex:
                 print('Unknown problem, echo command not received')
                 print(ex)
-
+        
         else:
             print('\nERROR: Unknown command entered\n')
 
-
-
     else:
-        pass
+        print("if you are reading this, something has gone teribly wrong")

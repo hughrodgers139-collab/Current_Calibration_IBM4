@@ -34,6 +34,58 @@ import matplotlib.pyplot as plt
 # --- Moving average and smoothing utilities (module level) ---
 
 MOD_NAME_STR = "Control_Examples"
+def derivative(vals, times):
+    """
+    Compute the numerical derivative of vals with respect to times.
+    """
+    dt = numpy.diff(times)
+    dv = numpy.diff(vals)
+    return dv / dt
+
+def smooth_signal(vals, window_size):
+    """
+    Apply a moving average twice to smooth the signal.
+    """
+    kernel = numpy.ones(window_size) / window_size
+    pad_width = window_size // 2
+    # Pad with edge values to avoid zeros at the edges
+    padded_vals = numpy.pad(vals, pad_width, mode='edge')
+    smoothed_once = numpy.convolve(padded_vals, kernel, mode='valid')
+    padded_once = numpy.pad(smoothed_once, pad_width, mode='edge')
+    smoothed_twice = numpy.convolve(padded_once, kernel, mode='valid')
+    # Ensure output length matches input
+    return smoothed_twice[:len(vals)]
+
+def read_all_channels_live(no_reads = 31, refresh_time = 0.2):
+    """
+    Continuously read all channels and refresh output in-place.
+
+    Stop by pressing Ctrl+C.
+    """
+
+    FUNC_NAME = ".read_all_channels_live()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+
+    try:
+        the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
+        ch_names = ['A2', 'A3', 'A4', 'A5', 'D2']
+
+        print("Live channel voltages (Ctrl+C to stop):")
+        while True:
+            vals = the_dev.ReadAverageVoltageAllChnnl(no_reads)
+            line = " | ".join(["%(v1)s: %(v2)0.4f V"%{"v1":ch, "v2":val} for ch, val in zip(ch_names, vals)])
+            print("\r" + line + "   ", end = "", flush = True)
+            time.sleep(refresh_time)
+    except KeyboardInterrupt:
+        print("\nStopped live reading.")
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+    finally:
+        try:
+            del the_dev # destructor for the IBM4 object, closes comms
+        except Exception:
+            pass
 
 def Simple_Open_Close():
     """
@@ -450,40 +502,8 @@ def Linear_Sweep_V2():
         print(ERR_STATEMENT)
         print(e)
 
-def read_all_channels_live(no_reads = 31, refresh_time = 0.2):
-    """
-    Continuously read all channels and refresh output in-place.
 
-    Stop by pressing Ctrl+C.
-    """
-
-    FUNC_NAME = ".read_all_channels_live()"
-    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
-
-    try:
-        the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
-        ch_names = ['A2', 'A3', 'A4', 'A5', 'D2']
-
-        print("Live channel voltages (Ctrl+C to stop):")
-        while True:
-            vals = the_dev.ReadAverageVoltageAllChnnl(no_reads)
-            line = " | ".join(["%(v1)s: %(v2)0.4f V"%{"v1":ch, "v2":val} for ch, val in zip(ch_names, vals)])
-            print("\r" + line + "   ", end = "", flush = True)
-            time.sleep(refresh_time)
-    except KeyboardInterrupt:
-        print("\nStopped live reading.")
-    except Exception as e:
-        print(ERR_STATEMENT)
-        print(e)
-    finally:
-        try:
-            del the_dev # destructor for the IBM4 object, closes comms
-        except Exception:
-            pass
-
-
-
-def CurCal():
+def CurCal(Waveform_plataue_times = None):
     """
     Perform a current calibration
     """
@@ -497,63 +517,48 @@ def CurCal():
             the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
             approx_k_factor = 80
             # instantiate an object to keep track of the sweep space parameters
-            v_start = 1
-            v_fixed = 3.3
-            resistance = 50.0
-            v_end = 2 
-            # no_steps = int(abs(v_start - v_end)/0.01)
-            no_steps = 10
-            print(no_steps)
-            
-            the_interval = Sweep_Interval.SweepSpace(no_steps, v_start, v_end)
+            A0_min = 0.0
+            A1_voltage = 3.3
+            resistor = 50.0
+            A0_max = 0.6
+            A0_max = A1_voltage  / resistor * 1000.0/90 # convert to volts
+            no_steps = int(A0_max / 0.01)
 
-            sweep_data = the_dev.SingleChannelSweepB('A0', the_interval, v_fixed = v_fixed, DELAY = DELAY) # use channel A0 to sweep over the voltage interval
+            print(f"A0_max: {A0_max}")
+
+            the_interval = Sweep_Interval.SweepSpace(no_steps, A0_min, A0_max)
+
+            sweep_data = the_dev.SingleChannelSweepC('A0', the_interval, v_fixed = A1_voltage, resistor = resistor, waveform_plataue_times = Waveform_plataue_times) # use channel A0 to sweep over the voltage interval
             
             chanel = 3
-            sweep_data[:,chanel] = sweep_data[:,chanel]/resistance * 1000
-            LOBF = numpy.polyfit(sweep_data[:,0]*1000, sweep_data[:,chanel], 1)
-            print("LOBF: ", LOBF)
-            plt.plot(sweep_data[:,0]*1000, sweep_data[:,chanel], 'o-')
-            plt.plot(sweep_data[:,0]*1000, LOBF[0]*sweep_data[:,0]*1000 + LOBF[1], 'r--', label = 'LOBF + {:0.2f} mA/V'.format(LOBF[0]*1000))
+            sweep_data[:,chanel] = sweep_data[:,chanel] *1000.0 / resistor # convert to mA
+            Cal_factor = numpy.polyfit(sweep_data[:,0], sweep_data[:,chanel], 1)
+            Waveform_plataue_times['Cal'] = Cal_factor[0]
+            Waveform_plataue_times['Cal_intercept'] = Cal_factor[1]
+            Waveform_plataue_times['R2'] = numpy.corrcoef(sweep_data[:,0], sweep_data[:,chanel])[0,1]**2
+            
+            print("Cal_factor: ", Cal_factor)
+            plt.plot(sweep_data[:,0], sweep_data[:,chanel], 'o-')
+            plt.plot(sweep_data[:,0], Cal_factor[0]*sweep_data[:,0] + Cal_factor[1], 'r--', label = 'Cal_factor + {:0.2f} mA/V'.format(Cal_factor[0]))
             plt.xlabel("Voltage (mV)")
             plt.ylabel("Current (mA)")
             plt.legend()
             plt.title("Current Calibration")
-            plt.text(0.5, 0.9, "delay set to {:0.1f} s, resistance = 50 Ohm".format(DELAY), transform=plt.gca().transAxes, ha='center')
+            plt.text(0.5, 0.9, "delay set to {:0.1f} s, resistor = {:0.1f} Ohm".format(DELAY, resistor), transform=plt.gca().transAxes, ha='center')
             plt.show()
 
-            # print('Measured data')
-            # print(sweep_data)
+
+            Waveform_plataue_times["help"] = "\"cal\" for calibration factor in mA/V and \"Cal_intercept\" for the intercept in mA, \"R2\" for the R-squared value of the fit,"
+            Waveform_plataue_times = sorted(Waveform_plataue_times.keys(), key=lambda k: len(k))
+
+            Save_dict_to_IBM4(Waveform_plataue_times, the_dev=the_dev)
+                              
         
 
             del the_dev # destructor for the IBM4 object, closes comms
         except Exception as e:
             print(ERR_STATEMENT)
             print(e)
-
-
-def derivative(vals, times):
-    """
-    Compute the numerical derivative of vals with respect to times.
-    """
-    dt = numpy.diff(times)
-    dv = numpy.diff(vals)
-    return dv / dt
-
-
-def smooth_signal(vals, window_size):
-    """
-    Apply a moving average twice to smooth the signal.
-    """
-    kernel = numpy.ones(window_size) / window_size
-    pad_width = window_size // 2
-    # Pad with edge values to avoid zeros at the edges
-    padded_vals = numpy.pad(vals, pad_width, mode='edge')
-    smoothed_once = numpy.convolve(padded_vals, kernel, mode='valid')
-    padded_once = numpy.pad(smoothed_once, pad_width, mode='edge')
-    smoothed_twice = numpy.convolve(padded_once, kernel, mode='valid')
-    # Ensure output length matches input
-    return smoothed_twice[:len(vals)]
 
 
 def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
@@ -580,8 +585,10 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plot
 
         the_dev.output_voltage_zero_to_hero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
         # ---------------------------------------------------------------------------------------------------------------------
-        if A0_voltage < 0.03:
-            Nreads = 2000 # number of reads
+        if A0_voltage < 0.02:
+            Nreads = 5000 # number of reads
+        elif A0_voltage < 0.03:
+            Nreads = 2500 # number of reads
         else:
             Nreads = 1000 # number of reads
         # ---------------------------------------------------------------------------------------------------------------------
@@ -620,7 +627,7 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plot
         
 
         plateau_time_seconds = times[responce_time] if len(times) > responce_time else responce_time * measurement_time
-        voltage_key = f"{A0_voltage:.3f}V"
+        voltage_key = float(f"{A0_voltage:.3f}V"[:-1])
         Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
 
         return Responce_times
@@ -631,7 +638,6 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plot
     finally:
         if local_dev is not None:
             del local_dev
-
 
 def segment_regressions(times, values, segment_length=250, A0_voltage=1, A1_voltage=1, show_plots=False):
     if show_plots:
@@ -785,13 +791,14 @@ def calibrate(resistor = 50.0, show_plots = False):
     try:
         the_dev = IBM4_Lib.Ser_Iface(read_mode = 'DC') # find the first connected IBM4 this can be changed in the IBM4 firmware
 
-        A0 = [0.02, 0.03]
+        A0 = [0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.1]
+
 
         # Collect response times keyed by input voltage.
         Responce_time_all = {}
-        
         for A0_voltage in A0:
-            if 3.2 * 1000.0 / resistor / 87. > A0_voltage : # check if the current is within the range of voltage limit over the resistor
+
+            if 3.2 * 1000.0 / resistor / 87. > A0_voltage: # check if the current is within the range of voltage limit over the resistor
                 response_dict = Read_Waveform_current(
                     A0_voltage=A0_voltage,
                     A1_voltage=3.25,
@@ -805,17 +812,15 @@ def calibrate(resistor = 50.0, show_plots = False):
                     voltage_key = f"{A0_voltage:.3f}V"
                     Responce_time_all[voltage_key] = numpy.nan
             else:
-                voltage_key = f"{A0_voltage:.3f}V"
+                voltage_key = f"{A0_voltage:.3f}"
                 Responce_time_all[voltage_key] = numpy.nan
-
+                
+        CurCal(Waveform_plataue_times = Responce_time_all)
         # Reuse the same open connection to save results.
-        Save_dict_to_IBM4(Responce_time_all, the_dev=the_dev)
         return Responce_time_all
     finally:
         if the_dev is not None:
             del the_dev
-
-
 
 def Save_dict_to_IBM4(msg_payload=None, the_dev=None):
     """
@@ -873,3 +878,4 @@ def Get_cal(Key=None):
         print(ERR_STATEMENT)
         print(e)
         return None
+    
