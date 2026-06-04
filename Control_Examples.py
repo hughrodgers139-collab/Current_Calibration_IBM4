@@ -494,10 +494,10 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
     H.Rodgers 4 - 6 - 2026
     """
 
-    FUNC_NAME = ".CurCal()"
+    FUNC_NAME = ".calibrate()"
     ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
 
-    the_dev = None  # possibly unnecessary________________________________
+    the_dev = None
     try:
         if resistor is None:
             resistor = 50.0
@@ -522,14 +522,15 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
         if approx_k_factor <= 0.0:
             raise ValueError("approx_k_factor must be > 0")
 
-        the_dev = IBM4_Lib.Ser_Iface(read_mode = 'DC') # find the first connected IBM4 this can be changed in the IBM4 firmware
+        the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4 this can be changed in the IBM4 firmware
                                                  # DC may be unnecessary________________________________
         A1_voltage = max_voltage_over_commponent
 
         # Note: for A0 = 0.01, there does not apear to be a plateau, 
         # the current is just too small, for A0 = 0.02, there is a very short plateau, for A0 = 0.03 and above, there are clear plateaus that can be used to determine the responce time
-        A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5] # voltage values to be applied to A0 for the current calibration sweep
-        A0 = [v for v in A0 if v <= A1_voltage * resistor  / (approx_k_factor-10)] # filter out values that are above the voltage limit over the component
+        A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0] # voltage values to be applied to A0 for the current calibration sweep
+        A0 = [v for v in A0 if v <= A1_voltage *1000 / resistor / approx_k_factor] # filter out values that are above the voltage limit over the component
+        print("\nA0 voltage values to be used in the sweep:", A0, "\n")
 
         # Collect response times keyed by input voltage._______________________________
 
@@ -547,7 +548,7 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
             # check if the current is within the range of voltage limit over the resistor
             if A1_voltage * 1000.0 / resistor / approx_k_factor > A0_voltage: 
 
-                IBM4_Dict = Read_Waveform_current( # Function that measures the time for the current to plateau and saves it to a dictionary with Vin A0 as the keys
+                IBM4_Dict = Read_Waveform_current_increase( # Function that measures the time for the current to plateau and saves it to a dictionary with Vin A0 as the keys
                     A0_voltage=A0_voltage,
                     A1_voltage=A1_voltage,
                     Responce_times=IBM4_Dict,
@@ -558,11 +559,17 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
             else:
                 voltage_key = round(float(A0_voltage), 4)
                 IBM4_Dict[voltage_key] = numpy.nan
-
+        print("\n\n", IBM4_Dict, show_plots, resistor, approx_k_factor , "\n\n")
         # CurCal is designed to Find the calibration factor taking into account the time taken to get to get to the current levels
-        CurCal(Waveform_plataue_times = IBM4_Dict, show_plots=show_plots, resistor=resistor, approx_k_factor=approx_k_factor)
+        CurCal(
+            Waveform_plataue_times = IBM4_Dict,
+            show_plots=show_plots,
+            resistor=resistor,
+            approx_k_factor=approx_k_factor,
+            the_dev=the_dev
+        )
         # Reuse the same open connection to save results.
-        print(IBM4_Dict)
+        print(IBM4_Dict["cal"])
     
     except Exception as e:
         print(ERR_STATEMENT)
@@ -574,17 +581,15 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
         if the_dev is not None:
             del the_dev
 
-def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
+def Read_Waveform_current_increase(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
     """
     Read the current waveform for a given A0 voltage starting from zero to measure its responce time
     H.Rodgers 4 - 6 - 2026
     """
 
-    FUNC_NAME = ".Read_Waveform_current()"
+    FUNC_NAME = ".Read_Waveform_current_increase()"
     ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
     
-    local_dev = None # i may need to go back and fix all of these the_dev
-
     try:
         if Responce_times is None:
             Responce_times = {}
@@ -592,13 +597,10 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plot
             Responce_times = {}
 
         if the_dev is None:
-            local_dev = IBM4_Lib.Ser_Iface(read_mode = 'DC')
-            the_dev = local_dev
+            raise ValueError("Read_Waveform_current requires an open Ser_Iface instance via the_dev")
 
         # these are values that i have foudn to be more than sufficient to capture the waveform for that voltage,
         # just makes it go a little faster
-        if A0_voltage < 0.01:
-            Nreads = 8000 # number of reads
         elif A0_voltage < 0.02:
             Nreads = 5000 # number of reads
         elif A0_voltage < 0.03:
@@ -643,9 +645,71 @@ def Read_Waveform_current(A0_voltage, A1_voltage, Responce_times=None, show_plot
         print(ERR_STATEMENT)
         print(e)
         return Responce_times
-    finally:
-        if local_dev is not None:
-            del local_dev
+
+def Read_Waveform_current_decrease(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
+    """
+    Read the current waveform for a given A0 voltage starting from zero to measure its responce time
+    H.Rodgers 4 - 6 - 2026
+    """
+
+    FUNC_NAME = ".Read_Waveform_current_decrease()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    
+    try:
+        if Responce_times is None:
+            Responce_times = {}
+        elif not isinstance(Responce_times, dict):
+            Responce_times = {}
+
+        if the_dev is None:
+            raise ValueError("Read_Waveform_current requires an open Ser_Iface instance via the_dev")
+
+        # these are values that i have foudn to be more than sufficient to capture the waveform for that voltage,
+        # just makes it go a little faster
+        elif A0_voltage < 0.02:
+            Nreads = 5000 # number of reads
+        elif A0_voltage < 0.03:
+            Nreads = 2500 # number of reads
+        else:
+            Nreads = 1500 # number of reads
+        
+        input_ch = 'A3'
+        # sets voltage to zero, waits a moment, then sets both voltages
+        the_dev.Output_voltage_to_zero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
+
+        # measures time to for waveform  
+        start = time.time()
+        # waveform voltage measurements
+        avg, err, vals = the_dev.ReadVoltage(input_ch, 'Multiple Voltage', Nreads)
+        end = time.time()
+        deltaT = end - start
+        measurement_time = deltaT / float(Nreads)
+        time_for_measurement = measurement_time * Nreads
+        times = numpy.linspace(0, time_for_measurement, Nreads)
+
+        smooth_wave_form = smooth_signal(vals, window_size = 200)
+
+        _, _, _, responce_time = Plateau_detection(times,
+                                                   smooth_wave_form,
+                                                   segment_length=250,
+                                                   A0_voltage=A0_voltage,
+                                                   A1_voltage=A1_voltage,
+                                                   show_plots=show_plots
+                                                   )
+        
+        if show_plots: 
+            plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.4f} s")
+            plt.show()        
+
+        plateau_time_seconds = times[responce_time] if len(times) > responce_time else responce_time * measurement_time
+        voltage_key = float(f"{A0_voltage:.4f}"[:-1])
+        Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
+
+        return Responce_times
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+        return Responce_times
 
 def Plateau_detection(times, values, segment_length=250, A0_voltage=1, A1_voltage=1, show_plots=False):
     """
@@ -786,7 +850,7 @@ def Plateau_detection(times, values, segment_length=250, A0_voltage=1, A1_voltag
 
         # If none matched, default to last candidate
         if responce_time is None:
-            responce_time = Slope_P4_volt_val["segment_end"]
+            responce_time = Slope_P3_volt_val["segment_end"]
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
@@ -814,7 +878,7 @@ def smooth_signal(vals, window_size):
         print(e)
         return vals
 
-def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, approx_k_factor = None):
+def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, approx_k_factor = None, the_dev = None):
     """
     Perform a current calibration by sweeping through different current levels and measuring the time taken 
     to reach the plateau for each level.
@@ -823,10 +887,13 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
     
     FUNC_NAME = ".CurCal()"
     ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    local_dev = None
     
     for DELAY in [0.1]:
         try:
-            the_dev = IBM4_Lib.Ser_Iface() # may have to take out_____________________________
+            if the_dev is None:
+                local_dev = IBM4_Lib.Ser_Iface()
+                the_dev = local_dev
             if Waveform_plataue_times is None or not isinstance(Waveform_plataue_times, dict):
                 Waveform_plataue_times = {}
             if approx_k_factor is None:
@@ -836,26 +903,28 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
                 raise ValueError("approx_k_factor must be > 0")
             # instantiate an object to keep track of the sweep space parameters
             A0_min = 0.0
-            A1_voltage = 3.3
+            A1_voltage = 3.25
+            
             if resistor is None:
                 resistor = 50.0
             resistor = float(resistor)
             if resistor <= 0.0:
                 raise ValueError("resistor must be > 0 Ohm")
-            3.25 * 10 / 80
-            A0_max = A1_voltage * resistor  / (approx_k_factor-10) # convert to volts
+            # A0 * cal = A1 / resistor *1000
+            A0_max = A1_voltage * 1000 / resistor / approx_k_factor # convert to volts
+            print("\nCalculated max A0 voltage for sweep: {:.4f} V\n".format(A0_max))
             if A0_max < 0.01:
                 raise ValueError("resistor is too large for requested calibration range")
             no_steps = int(A0_max / 0.01)
-            print(A0_max, no_steps)
             no_steps = max(no_steps, 2)
-            print("\n",A0_max, A1_voltage, resistor, approx_k_factor, no_steps, "\n")
 
 
 
             the_interval = Sweep_Interval.SweepSpace(no_steps, A0_min, A0_max)
 
             sweep_data = the_dev.SingleChannelSweepC('A0', the_interval, v_fixed = A1_voltage, resistor = resistor, waveform_plataue_times = Waveform_plataue_times) # use channel A0 to sweep over the voltage interval
+            if sweep_data is None or getattr(sweep_data, "size", 0) == 0:
+                raise RuntimeError("SingleChannelSweepC returned no data; calibration sweep failed")
             
             chanel = 3
             sweep_data[:,chanel] = sweep_data[:,chanel] *1000.0 / resistor # convert to mA
@@ -863,30 +932,48 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
             Waveform_plataue_times['Cal'] = Cal_factor[0]
             Waveform_plataue_times['Cal_intercept'] = Cal_factor[1]
             Waveform_plataue_times['R2'] = numpy.corrcoef(sweep_data[:,0], sweep_data[:,chanel])[0,1]**2
+            Waveform_plataue_times['resistor'] = resistor
+            # Waveform_plataue_times['']
 
-            if show_plots == False:
-                print("Cal_factor: ", Cal_factor)
-                plt.plot(sweep_data[:,0], sweep_data[:,chanel], 'o-')
-                plt.plot(sweep_data[:,0], Cal_factor[0]*sweep_data[:,0] + Cal_factor[1], 'r--', label = 'Cal_factor + {:0.2f} mA/V'.format(Cal_factor[0]))
-                plt.xlabel("Voltage (mV)")
-                plt.ylabel("Current (mA)")
-                plt.legend()
-                plt.title("Current Calibration")
-                plt.text(0.5, 0.9, "delay set to {:0.1f} s, resistor = {:0.1f} Ohm".format(DELAY, resistor), transform=plt.gca().transAxes, ha='center')
-                plt.show()
+            
+            print("Cal_factor: ", Cal_factor)
+            plt.plot(sweep_data[:,0], sweep_data[:,chanel], 'o-')
+            plt.plot(sweep_data[:,0], Cal_factor[0]*sweep_data[:,0] + Cal_factor[1], 'r--', label = 'Cal_factor + {:0.2f} mA/V'.format(Cal_factor[0]))
+            plt.xlabel("Voltage (mV)")
+            plt.ylabel("Current (mA)")
+            plt.legend()
+            plt.title("Current Calibration")
+            plt.text(0.5, 0.9, "delay set to {:0.1f} s, resistor = {:0.1f} Ohm".format(DELAY, resistor), transform=plt.gca().transAxes, ha='center')
+            plt.show()
 
 
-            Waveform_plataue_times["help"] = "\"cal\" for calibration factor in mA/V and \"Cal\" for the intercept in mA, \"R2\" for the R-squared value of the fit,"
+            Waveform_plataue_times["help"] = "\"Cal\" for calibration factor in mA/V and \"Cal_intercept\" for the intercept in mA, \"R2\" for the R-squared value of the fit,"
             payload = dict(sorted(Waveform_plataue_times.items(), key=lambda kv: (isinstance(kv[0], str), str(kv[0]))))
+            
+            while True:
+                choice = input("Save calibration results to IBM4? (y/n): ").strip().lower()
 
-            Save_dict_to_IBM4(payload, the_dev=the_dev)
-                              
-        
+                if choice == 'y':
+                    Save_dict_to_IBM4(payload, the_dev=the_dev)
+                    print("Calibration results saved to IBM4.")
+                    break
 
-            del the_dev # destructor for the IBM4 object, closes comms
+                elif choice == 'n':
+                    print("Calibration results NOT saved.")
+                    input("Press Enter to exit.")
+                    break
+
+                else:
+                    print("Invalid input. Please enter 'y' or 'n'.")
+
         except Exception as e:
             print(ERR_STATEMENT)
             print(e)
+        finally:
+            if local_dev is not None:
+                del local_dev
+                local_dev = None
+                the_dev = None
 
 
 # IBM4 save and send data
@@ -946,3 +1033,4 @@ def Get_cal(Key=None):
         print(ERR_STATEMENT)
         print(e)
         return None
+

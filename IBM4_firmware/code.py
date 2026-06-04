@@ -569,5 +569,5 @@ while True:
         else:
             print('\nERROR: Unknown command entered\n')
 
-    else:
-        print("if you are reading this, something has gone teribly wrong")
+#    else:
+#        print("if you are reading this, something has gone teribly wrong")
