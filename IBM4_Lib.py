@@ -1286,7 +1286,7 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-    def Output_voltage_from_zero(self, A0_voltage, A1_voltage):
+    def Output_voltage_from_zero(self, A0_voltage = 0.0, A1_voltage = 0.0):
         self.FUNC_NAME = ".Output_voltage_from_zero()" # use this in exception handling messages
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
@@ -1650,6 +1650,11 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
+    def max_voltage(resistor, approx_k_factor):
+        A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25] 
+        A0 = [v for v in A0 if v <=  3.3/resistor /(approx_k_factor/1000) and v * approx_k_factor <= 250]
+        return A0
+    
     def SingleChannelSweepC(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, resistor = 50, waveform_plataue_times = None, approx_k_factor = 100):
     
         """
@@ -1692,8 +1697,7 @@ class Ser_Iface(object):
             c3 = voltage_interval.defined # check that the parameters in the interval have been defined correctly
             c7 = True if no_averages > 3 and no_averages < 103 else False # confirm that no. averages being taken is a sensible value
             c8 = True if v_fixed >= self.VMIN and v_fixed <= self.VMAX else False # confirm that the fixed voltage is in range
-            c11 = True if v_fixed *1000 / resistor / approx_k_factor <= voltage_interval.stop else False # A1_voltage *1000 / resistor / approx_k_factor
-            c10 = c1 and c2 and c3 and c7 and c8 and c11
+            c10 = c1 and c2 and c3 and c7 and c8
         
             if c10:
                 # Set the voltage on the channel that is NOT sweeping

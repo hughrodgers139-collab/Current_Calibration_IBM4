@@ -528,10 +528,9 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
 
         # Note: for A0 = 0.01, there does not apear to be a plateau, 
         # the current is just too small, for A0 = 0.02, there is a very short plateau, for A0 = 0.03 and above, there are clear plateaus that can be used to determine the responce time
-        A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0] # voltage values to be applied to A0 for the current calibration sweep
-        A0 = [v for v in A0 if v <= A1_voltage *1000 / resistor / approx_k_factor] # filter out values that are above the voltage limit over the component
-        print("\nA0 voltage values to be used in the sweep:", A0, "\n")
-
+        # filter out values that are above the voltage limit over the component
+        A0 = max_voltage(resistor, approx_k_factor)
+        # A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7] 
         # Collect response times keyed by input voltage._______________________________
 
         IBM4_Dict = {}      # dictinary to save 
@@ -601,13 +600,22 @@ def Read_Waveform_current_increase(A0_voltage, A1_voltage, Responce_times=None, 
 
         # these are values that i have foudn to be more than sufficient to capture the waveform for that voltage,
         # just makes it go a little faster
-        elif A0_voltage < 0.02:
-            Nreads = 5000 # number of reads
-        elif A0_voltage < 0.03:
-            Nreads = 2500 # number of reads
-        else:
-            Nreads = 1500 # number of reads
+
+        # elif A0_voltage < 0.02:
+        #     Nreads = 5000 # number of reads
+        # elif A0_voltage < 0.03:
+        #     Nreads = 2500 # number of reads
+        # else:
+        #     Nreads = 1500 # number of reads
         
+        the_dev.Output_voltage_from_zero(A1_voltage = A1_voltage)
+
+        time.sleep(0.5) 
+        Nreads = 5000
+
+
+
+
         input_ch = 'A3'
         # sets voltage to zero, waits a moment, then sets both voltages
         the_dev.Output_voltage_from_zero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
@@ -878,6 +886,11 @@ def smooth_signal(vals, window_size):
         print(e)
         return vals
 
+def max_voltage(resistor, approx_k_factor):
+    A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25] 
+    A0 = [v for v in A0 if v <=  3.3/resistor /(approx_k_factor/1000) and v * approx_k_factor <= 250]
+    return A0
+
 def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, approx_k_factor = None, the_dev = None):
     """
     Perform a current calibration by sweeping through different current levels and measuring the time taken 
@@ -910,11 +923,12 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
             resistor = float(resistor)
             if resistor <= 0.0:
                 raise ValueError("resistor must be > 0 Ohm")
-            # A0 * cal = A1 / resistor *1000
-            A0_max = A1_voltage * 1000 / resistor / approx_k_factor # convert to volts
-            print("\nCalculated max A0 voltage for sweep: {:.4f} V\n".format(A0_max))
-            if A0_max < 0.01:
-                raise ValueError("resistor is too large for requested calibration range")
+            A0_max = max(max_voltage(resistor, approx_k_factor))
+            print(resistor, approx_k_factor, A0_max)
+
+            if A0_max < 0.05:
+                raise ValueError("resistor is too large assumiing approx_k_factor of 90")
+            
             no_steps = int(A0_max / 0.01)
             no_steps = max(no_steps, 2)
 
@@ -923,6 +937,7 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
             the_interval = Sweep_Interval.SweepSpace(no_steps, A0_min, A0_max)
 
             sweep_data = the_dev.SingleChannelSweepC('A0', the_interval, v_fixed = A1_voltage, resistor = resistor, waveform_plataue_times = Waveform_plataue_times) # use channel A0 to sweep over the voltage interval
+            
             if sweep_data is None or getattr(sweep_data, "size", 0) == 0:
                 raise RuntimeError("SingleChannelSweepC returned no data; calibration sweep failed")
             
@@ -933,8 +948,7 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
             Waveform_plataue_times['Cal_intercept'] = Cal_factor[1]
             Waveform_plataue_times['R2'] = numpy.corrcoef(sweep_data[:,0], sweep_data[:,chanel])[0,1]**2
             Waveform_plataue_times['resistor'] = resistor
-            # Waveform_plataue_times['']
-
+            
             
             print("Cal_factor: ", Cal_factor)
             plt.plot(sweep_data[:,0], sweep_data[:,chanel], 'o-')
