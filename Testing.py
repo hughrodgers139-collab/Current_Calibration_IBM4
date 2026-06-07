@@ -12,12 +12,10 @@ import numpy
 import matplotlib.pyplot as plt
 import json
 import ast
-# Where are you? 
-pwd = os.getcwd()
+
 
 # print(pwd)
 
-print("\n")
 # 0. Basic Find, Open, Close
 # CE.Simple_Open_Close()
 
@@ -42,13 +40,3 @@ print("\n")
 # 7. Linear single channel sweep
 # CE.Linear_Sweep_V1()
 # CE.Linear_Sweep_V2()
-
-
-# CE.calibrate(resistor=50, show_plots=False)
-
-CE.Get_cal()
-
-
-
-print("\n")
-

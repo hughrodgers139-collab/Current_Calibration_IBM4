@@ -551,7 +551,7 @@ while True:
             try:
                 # Echo the saved payload, or a specific key if one is provided.
                 key = command[len("Get_cal"):].strip()
-                payload = Get_saved_value(key) if key else Get_saved_value()
+                payload = Get_saved_value(key) if key else Get_saved_value("help")
                 if payload is None:
                     if key:
                         print('No saved value for key: ' + key)
@@ -569,5 +569,5 @@ while True:
         else:
             print('\nERROR: Unknown command entered\n')
 
-    else:
-        print("if you are reading this, something has gone teribly wrong")
+#    else:
+#        print("if you are reading this, something has gone teribly wrong")
