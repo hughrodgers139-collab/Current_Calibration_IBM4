@@ -174,7 +174,6 @@ class Ser_Iface(object):
         
         return "class for interfacing to an IBM4"
     
-
     def CommsStatus(self, loud = False):
         """
         investigate the status of the serial comms link
