@@ -176,6 +176,11 @@ while True:
         
         if command.startswith("*IDN"):
             print('ISBY-UCC-RevA.1')
+            print('Current Source', Get_saved_value("Cal"), " mA/V, max 250 mA")
+            print('software: https://github.com/hughrodgers139-collab/Current_Calibration_IBM4')
+            print('for more information on the board and calibration, run Controle_Examples.Get_cal("help")')
+            print('to run calibration, run Controle_Examples.Message(resistor = ...)')
+
          #   """
         if command.startswith("Calibrate"):
             try:

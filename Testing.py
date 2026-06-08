@@ -1,42 +1,10 @@
-"""
-Script for running the Methods from Control_Examples.py
-Uncomment the method you would like to test
-
-R. Sheehan 19 - 9 - 2024
-"""
-
-import os
-import Control_Examples as CE
-
-import numpy
-import matplotlib.pyplot as plt
-import json
-import ast
+import Calibration_class
 
 
-# print(pwd)
+cal_clas = Calibration_class.IBM4Calibrator(show_plots=True)
 
-# 0. Basic Find, Open, Close
-# CE.Simple_Open_Close()
+cal_clas.calibrate()
+# test = {"a": 1, "b": 2}
+# cal_clas.save_dict_to_IBM4(test)
+cal_clas.get_cal()
 
-# 1. Step through voltages
-#CE.Step_Through_Voltages()
-
-# 2. Basic single channel sweep
-# CE.Simple_Sweep()
-
-# 3. Read all input channels
-# CE.Simple_Sweep_Read_All()
-
-# 4. Differential read
-# CE.Differential_Readings()
-
-# 5. Multi-reads and timings
-# CE.Multiple_Readings()
-
-# 6. Multimeter mode
-# CE.Multimeter_Mode()
-
-# 7. Linear single channel sweep
-# CE.Linear_Sweep_V1()
-# CE.Linear_Sweep_V2()

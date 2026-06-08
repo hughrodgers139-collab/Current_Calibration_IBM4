@@ -530,11 +530,10 @@ def calibrate(resistor = None, max_voltage_over_commponent = 3.25, show_plots = 
         # the current is just too small, for A0 = 0.02, there is a very short plateau, for A0 = 0.03 and above, there are clear plateaus that can be used to determine the responce time
         # filter out values that are above the voltage limit over the component
         A0 = max_voltage(resistor, approx_k_factor)
-        # A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7] 
         # Collect response times keyed by input voltage._______________________________
 
         IBM4_Dict = {}      # dictinary to save 
-        max_supported_a0 = A1_voltage * resistor  / (approx_k_factor-10)
+        max_supported_a0 = A0[-1]
 
         if max_supported_a0 < 0.075: # this is a bit of an arbitrary threshold, but it is based on the observation that for A0 = 0.01, there does not apear to be a plateau, for A0 = 0.02, there is a very short plateau, for A0 = 0.03 and above, there are clear plateaus that can be used to determine the responce time
             raise ValueError(
@@ -597,23 +596,11 @@ def Read_Waveform_current_increase(A0_voltage, A1_voltage, Responce_times=None, 
 
         if the_dev is None:
             raise ValueError("Read_Waveform_current requires an open Ser_Iface instance via the_dev")
-
-        # these are values that i have foudn to be more than sufficient to capture the waveform for that voltage,
-        # just makes it go a little faster
-
-        # elif A0_voltage < 0.02:
-        #     Nreads = 5000 # number of reads
-        # elif A0_voltage < 0.03:
-        #     Nreads = 2500 # number of reads
-        # else:
-        #     Nreads = 1500 # number of reads
         
         the_dev.Output_voltage_from_zero(A1_voltage = A1_voltage)
 
         time.sleep(0.5) 
         Nreads = 5000
-
-
 
 
         input_ch = 'A3'
@@ -640,78 +627,16 @@ def Read_Waveform_current_increase(A0_voltage, A1_voltage, Responce_times=None, 
                                                    show_plots=show_plots
                                                    )
         
-        if show_plots: 
-            plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.4f} s")
-            plt.show()        
+        # if show_plots: 
+        #     plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.4f} s")
+        #     plt.show()        
 
         plateau_time_seconds = times[responce_time] if len(times) > responce_time else responce_time * measurement_time
         voltage_key = float(f"{A0_voltage:.4f}"[:-1])
-        Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
-
-        return Responce_times
-    except Exception as e:
-        print(ERR_STATEMENT)
-        print(e)
-        return Responce_times
-
-def Read_Waveform_current_decrease(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
-    """
-    Read the current waveform for a given A0 voltage starting from zero to measure its responce time
-    H.Rodgers 4 - 6 - 2026
-    """
-
-    FUNC_NAME = ".Read_Waveform_current_decrease()"
-    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
-    
-    try:
-        if Responce_times is None:
-            Responce_times = {}
-        elif not isinstance(Responce_times, dict):
-            Responce_times = {}
-
-        if the_dev is None:
-            raise ValueError("Read_Waveform_current requires an open Ser_Iface instance via the_dev")
-
-        # these are values that i have foudn to be more than sufficient to capture the waveform for that voltage,
-        # just makes it go a little faster
-        elif A0_voltage < 0.02:
-            Nreads = 5000 # number of reads
-        elif A0_voltage < 0.03:
-            Nreads = 2500 # number of reads
+        if responce_time > list(Responce_times.items())[-1]:
+            Responce_times[voltage_key] = list(Responce_times.items())[-1]
         else:
-            Nreads = 1500 # number of reads
-        
-        input_ch = 'A3'
-        # sets voltage to zero, waits a moment, then sets both voltages
-        the_dev.Output_voltage_to_zero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
-
-        # measures time to for waveform  
-        start = time.time()
-        # waveform voltage measurements
-        avg, err, vals = the_dev.ReadVoltage(input_ch, 'Multiple Voltage', Nreads)
-        end = time.time()
-        deltaT = end - start
-        measurement_time = deltaT / float(Nreads)
-        time_for_measurement = measurement_time * Nreads
-        times = numpy.linspace(0, time_for_measurement, Nreads)
-
-        smooth_wave_form = smooth_signal(vals, window_size = 200)
-
-        _, _, _, responce_time = Plateau_detection(times,
-                                                   smooth_wave_form,
-                                                   segment_length=250,
-                                                   A0_voltage=A0_voltage,
-                                                   A1_voltage=A1_voltage,
-                                                   show_plots=show_plots
-                                                   )
-        
-        if show_plots: 
-            plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.4f} s")
-            plt.show()        
-
-        plateau_time_seconds = times[responce_time] if len(times) > responce_time else responce_time * measurement_time
-        voltage_key = float(f"{A0_voltage:.4f}"[:-1])
-        Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
+            Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
 
         return Responce_times
     except Exception as e:
@@ -862,7 +787,7 @@ def Plateau_detection(times, values, segment_length=250, A0_voltage=1, A1_voltag
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
-
+    
     return results, slope_values, candidates, responce_time
 
 def smooth_signal(vals, window_size):
@@ -887,7 +812,7 @@ def smooth_signal(vals, window_size):
         return vals
 
 def max_voltage(resistor, approx_k_factor):
-    A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25] 
+    A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 2.75, 3.0, 3.25] 
     A0 = [v for v in A0 if v <=  3.3/resistor /(approx_k_factor/1000) and v * approx_k_factor <= 250]
     return A0
 
@@ -923,7 +848,7 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
             resistor = float(resistor)
             if resistor <= 0.0:
                 raise ValueError("resistor must be > 0 Ohm")
-            A0_max = max(max_voltage(resistor, approx_k_factor))
+            A0_max = max_voltage(resistor, approx_k_factor)[-1]
             print(resistor, approx_k_factor, A0_max)
 
             if A0_max < 0.05:
@@ -992,6 +917,7 @@ def CurCal(Waveform_plataue_times = None, show_plots = False, resistor = None, a
 
 # IBM4 save and send data
 
+
 def Save_dict_to_IBM4(msg_payload=None, the_dev=None):
     """
     Send a message payload to the IBM4 firmware.
@@ -1048,3 +974,67 @@ def Get_cal(Key=None):
         print(e)
         return None
 
+"""
+
+def Read_Waveform_current_decrease(A0_voltage, A1_voltage, Responce_times=None, show_plots=False, the_dev=None):
+
+
+    FUNC_NAME = ".Read_Waveform_current_decrease()"
+    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
+    
+    try:
+        if Responce_times is None:
+            Responce_times = {}
+        elif not isinstance(Responce_times, dict):
+            Responce_times = {}
+
+        if the_dev is None:
+            raise ValueError("Read_Waveform_current requires an open Ser_Iface instance via the_dev")
+
+        # these are values that i have foudn to be more than sufficient to capture the waveform for that voltage,
+        # just makes it go a little faster
+        elif A0_voltage < 0.02:
+            Nreads = 5000 # number of reads
+        elif A0_voltage < 0.03:
+            Nreads = 2500 # number of reads
+        else:
+            Nreads = 1500 # number of reads
+        
+        input_ch = 'A3'
+        # sets voltage to zero, waits a moment, then sets both voltages
+        the_dev.Output_voltage_to_zero(A0_voltage = A0_voltage, A1_voltage = A1_voltage)
+
+        # measures time to for waveform  
+        start = time.time()
+        # waveform voltage measurements
+        avg, err, vals = the_dev.ReadVoltage(input_ch, 'Multiple Voltage', Nreads)
+        end = time.time()
+        deltaT = end - start
+        measurement_time = deltaT / float(Nreads)
+        time_for_measurement = measurement_time * Nreads
+        times = numpy.linspace(0, time_for_measurement, Nreads)
+
+        smooth_wave_form = smooth_signal(vals, window_size = 200)
+
+        _, _, _, responce_time = Plateau_detection(times,
+                                                   smooth_wave_form,
+                                                   segment_length=250,
+                                                   A0_voltage=A0_voltage,
+                                                   A1_voltage=A1_voltage,
+                                                   show_plots=show_plots
+                                                   )
+        
+        if show_plots: 
+            plt.axvline(x=responce_time*measurement_time, color='g', linestyle='--', label=f"Response Time: {responce_time:.4f} s")
+            plt.show()        
+
+        plateau_time_seconds = times[responce_time] if len(times) > responce_time else responce_time * measurement_time
+        voltage_key = float(f"{A0_voltage:.4f}"[:-1])
+        Responce_times[voltage_key] = round(float(plateau_time_seconds), 4)
+
+        return Responce_times
+    except Exception as e:
+        print(ERR_STATEMENT)
+        print(e)
+        return Responce_times
+"""
