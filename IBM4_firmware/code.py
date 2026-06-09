@@ -176,6 +176,11 @@ while True:
         
         if command.startswith("*IDN"):
             print('ISBY-UCC-RevA.1')
+            print('Current Source', Get_saved_value("Cal"), " mA/V, max 250 mA")
+            print('software: https://github.com/hughrodgers139-collab/Current_Calibration_IBM4')
+            print('for more information on the board and calibration, run Controle_Examples.Get_cal("help")')
+            print('to run calibration, run Controle_Examples.Message(resistor = ...)')
+
          #   """
         if command.startswith("Calibrate"):
             try:
@@ -551,7 +556,7 @@ while True:
             try:
                 # Echo the saved payload, or a specific key if one is provided.
                 key = command[len("Get_cal"):].strip()
-                payload = Get_saved_value(key) if key else Get_saved_value()
+                payload = Get_saved_value(key) if key else Get_saved_value("help")
                 if payload is None:
                     if key:
                         print('No saved value for key: ' + key)
@@ -569,5 +574,5 @@ while True:
         else:
             print('\nERROR: Unknown command entered\n')
 
-    else:
-        print("if you are reading this, something has gone teribly wrong")
+#    else:
+#        print("if you are reading this, something has gone teribly wrong")

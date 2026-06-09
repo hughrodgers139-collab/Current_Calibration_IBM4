@@ -174,7 +174,6 @@ class Ser_Iface(object):
         
         return "class for interfacing to an IBM4"
     
-
     def CommsStatus(self, loud = False):
         """
         investigate the status of the serial comms link
@@ -1275,10 +1274,7 @@ class Ser_Iface(object):
             print(e)
 
     def output_voltage(self, A0_voltage, A1_voltage):
-    
-   
-
-        self.output_voltage = ".output_voltage()" # use this in exception handling messages
+        self.FUNC_NAME = ".output_voltage()" # use this in exception handling messages
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
@@ -1289,11 +1285,8 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-    def output_voltage_zero_to_hero(self, A0_voltage, A1_voltage):
-    
-   
-
-        self.output_voltage = ".output_voltage()" # use this in exception handling messages
+    def Output_voltage_from_zero(self, A0_voltage = 0.0, A1_voltage = 0.0):
+        self.FUNC_NAME = ".Output_voltage_from_zero()" # use this in exception handling messages
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
@@ -1306,6 +1299,22 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
     
+
+    def Output_voltage_to_zero(self, A0_voltage, A1_voltage):
+        self.FUNC_NAME = ".Output_voltage_to_zero()" # use this in exception handling messages
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            self.WriteVoltage('A0', set_voltage =  A0_voltage)
+            self.WriteVoltage('A1', set_voltage =  A1_voltage)
+            time.sleep(1)
+            self.ZeroIBM4()
+
+            
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+
     def MultimeterPrompt(self):
         """
         text processing for the multimeter mode prompt
@@ -1594,6 +1603,7 @@ class Ser_Iface(object):
             print(e)    
 
     # writing and reading data from IBM4 
+    
     def send_mes(self, msg, loud=True):
         self.FUNC_NAME = ".send_mes()"
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
@@ -1639,7 +1649,12 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-    def SingleChannelSweepC(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, resistor = 50, waveform_plataue_times = None):
+    def max_voltage(resistor, approx_k_factor):
+        A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25] 
+        A0 = [v for v in A0 if v <=  3.3/resistor /(approx_k_factor/1000) and v * approx_k_factor <= 250]
+        return A0
+    
+    def SingleChannelSweepC(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, resistor = 50, waveform_plataue_times = None, approx_k_factor = 100):
     
         """
         Enable the microcontroller to perform a linear sweep of measurements using a single channel
@@ -1681,8 +1696,7 @@ class Ser_Iface(object):
             c3 = voltage_interval.defined # check that the parameters in the interval have been defined correctly
             c7 = True if no_averages > 3 and no_averages < 103 else False # confirm that no. averages being taken is a sensible value
             c8 = True if v_fixed >= self.VMIN and v_fixed <= self.VMAX else False # confirm that the fixed voltage is in range
-            c11 = True if v_fixed * 1000.0 / resistor > voltage_interval.stop * 87 else False
-            c10 = c1 and c2 and c3 and c7 and c8 and c11
+            c10 = c1 and c2 and c3 and c7 and c8
         
             if c10:
                 # Set the voltage on the channel that is NOT sweeping
@@ -1693,25 +1707,28 @@ class Ser_Iface(object):
 
                 voltage_data = numpy.array([]) # instantiate an empty numpy array to store the sweep data
                 v_set = voltage_interval.start # initialise the set-voltage
-                # perform the sweep
-                print('\nLinear Sweep in Progress')
-                print('Sweeping voltage on Analog Output:',swp_channel)
-                print('Fixed voltage of',v_fixed,'(V) on Analog Output:',fixed_channel,'\n')
                 count = 0
                 #while v_set < voltage_interval.stop:
 
-
+                copy = None
                 for i in range(0, voltage_interval.Nsteps, 1):
                     step_data = numpy.array([]) # instantiate an empty numpy array to hold the data for each step of the sweep
                     self.WriteVoltage(swp_channel, v_set) # set the voltage at the analog output channel
 
-                    if waveform_plataue_times is not None:
-                        plateau_key = min((key for key in waveform_plataue_times if key > v_set), default=None)
+                    delay_seconds = 0.1
+                    plateau_key = None
+                    if isinstance(waveform_plataue_times, dict) and len(waveform_plataue_times) > 0:
+                        numeric_keys = [key for key in waveform_plataue_times if isinstance(key, (int, float))]
+                        plateau_key = min((key for key in numeric_keys if key > v_set), default=None)
                         if plateau_key is not None:
-                            time.sleep(waveform_plataue_times[plateau_key]) # Apply the matching plateau delay
-                            print(f'Applied plateau delay of {waveform_plataue_times[plateau_key]} seconds for voltage {v_set} V')
-                    else:
-                        time.sleep(waveform_plataue_times[plateau_key.stop]) # Apply a fixed delay
+                            candidate_delay = waveform_plataue_times.get(plateau_key)
+                            if isinstance(candidate_delay, (int, float)) and candidate_delay >= 0.0:
+                                delay_seconds = candidate_delay
+
+                    time.sleep(delay_seconds)
+                    if copy is None or copy != delay_seconds:
+                        print(f'{v_set:.4f} V - delay of {delay_seconds:.2f} seconds ')
+                    copy = delay_seconds
 
                     chnnl_values = self.ReadAverageVoltageAllChnnl(no_averages) # read the averaged voltages at all analog input channels
                     # save the data
