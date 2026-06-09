@@ -1285,35 +1285,6 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-    def Output_voltage_from_zero(self, A0_voltage = 0.0, A1_voltage = 0.0):
-        self.FUNC_NAME = ".Output_voltage_from_zero()" # use this in exception handling messages
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:
-            self.ZeroIBM4()
-            time.sleep(0.5)
-            self.WriteVoltage('A0', set_voltage =  A0_voltage)
-            self.WriteVoltage('A1', set_voltage =  A1_voltage)
-            
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)
-    
-
-    def Output_voltage_to_zero(self, A0_voltage, A1_voltage):
-        self.FUNC_NAME = ".Output_voltage_to_zero()" # use this in exception handling messages
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:
-            self.WriteVoltage('A0', set_voltage =  A0_voltage)
-            self.WriteVoltage('A1', set_voltage =  A1_voltage)
-            time.sleep(1)
-            self.ZeroIBM4()
-
-            
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)
 
     def MultimeterPrompt(self):
         """

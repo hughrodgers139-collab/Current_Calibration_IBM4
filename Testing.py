@@ -1,10 +1,8 @@
-import Calibration_class
+from Calibration_class import IBM4Calibrator
 
 
-cal_clas = Calibration_class.IBM4Calibrator(show_plots=True)
+Cal = IBM4Calibrator(show_plots=True)
+Cal.calibrate()
 
-cal_clas.calibrate()
-# test = {"a": 1, "b": 2}
-# cal_clas.save_dict_to_IBM4(test)
-cal_clas.get_cal()
+
 
