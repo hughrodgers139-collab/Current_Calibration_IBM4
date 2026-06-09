@@ -1284,37 +1284,7 @@ class Ser_Iface(object):
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)
-
-    def Output_voltage_from_zero(self, A0_voltage = 0.0, A1_voltage = 0.0):
-        self.FUNC_NAME = ".Output_voltage_from_zero()" # use this in exception handling messages
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:
-            self.ZeroIBM4()
-            time.sleep(0.5)
-            self.WriteVoltage('A0', set_voltage =  A0_voltage)
-            self.WriteVoltage('A1', set_voltage =  A1_voltage)
-            
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)
     
-
-    def Output_voltage_to_zero(self, A0_voltage, A1_voltage):
-        self.FUNC_NAME = ".Output_voltage_to_zero()" # use this in exception handling messages
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:
-            self.WriteVoltage('A0', set_voltage =  A0_voltage)
-            self.WriteVoltage('A1', set_voltage =  A1_voltage)
-            time.sleep(1)
-            self.ZeroIBM4()
-
-            
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)
-
     def MultimeterPrompt(self):
         """
         text processing for the multimeter mode prompt
@@ -1604,6 +1574,7 @@ class Ser_Iface(object):
 
     # writing and reading data from IBM4 
     
+
     def send_mes(self, msg, loud=True):
         self.FUNC_NAME = ".send_mes()"
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
@@ -1649,119 +1620,7 @@ class Ser_Iface(object):
             print(self.ERR_STATEMENT)
             print(e)
 
-    def max_voltage(resistor, approx_k_factor):
-        A0 = [0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25] 
-        A0 = [v for v in A0 if v <=  3.3/resistor /(approx_k_factor/1000) and v * approx_k_factor <= 250]
-        return A0
-    
-    def SingleChannelSweepC(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, resistor = 50, waveform_plataue_times = None, approx_k_factor = 100):
-    
-        """
-        Enable the microcontroller to perform a linear sweep of measurements using a single channel
-        start at v_strt, set voltage, read inputs, increment_voltage, return voltage readings at all inputs
-        format the voltage readings after the fact
-    
-        swp_channel is the channel being used as a voltage source
-        voltage_interval describes the voltage sweep space
-        v_fixed is the constant voltage to be output by the channel that is NOT being swept
-        caveat emptor no_steps is constrained by fact that smallest voltage increment is 0.01V
-
-        Output is a numpy array of the form
-        [v_set, A2, A3, A4, A5, D2]
-        """
-
-        # Notes on syntax for passing a class as an argument
-        # https://stackoverflow.com/questions/4501403/class-as-an-input-in-a-function
-        # https://www.reddit.com/r/learnpython/comments/12fk1we/pass_class_as_argument_to_another_class/?rdt=50057
-        # R. Sheehan 22 - 7 - 2024
-
-        # this version makes use of the Sweep_Interval object
-        # the thinking behind this is that it would make it easier to write a two-channel sweep, e.g. BJT characterisation
-        # you could write a method that could take two SweepInterval objects as inputs to manage
-        # the sweep paramters, it would be cleaner than having 6 parameters which you would otherwise need
-        # the two channel sweep would then be a nested loop; outer loop over v_fixed, inner loop assuming constant v_fixed
-        # It would be easy to implement, the issue is that the data handling becomes a bit of pain
-        # You'd end up with an unwieldy array that may be difficult for people to comprehend
-        # Output array would look something like [v_set, A21, A31, A41, A51, D21, A22, A32, A42, A52, D22, ..., A2n, A3n, A4n, A5n, D2n]
-        # Might not be too bad if I wrote another method to help the user unpack the A2x, A3x, A4x, A5x, D2x readings
-        # R. Sheehan 23 - 7 - 2024
-
-
-        self.FUNC_NAME = ".SingleChannelSweepC()" # use this in exception handling messages
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:       
-            c1 = self.instr_obj.isOpen() # confirm that the intstrument object has been instantiated
-            c2 = True if swp_channel in self.Write_Chnnls else False # confirm that the output channel label is correct             
-            c3 = voltage_interval.defined # check that the parameters in the interval have been defined correctly
-            c7 = True if no_averages > 3 and no_averages < 103 else False # confirm that no. averages being taken is a sensible value
-            c8 = True if v_fixed >= self.VMIN and v_fixed <= self.VMAX else False # confirm that the fixed voltage is in range
-            c10 = c1 and c2 and c3 and c7 and c8
-        
-            if c10:
-                # Set the voltage on the channel that is NOT sweeping
-                fixed_channel = 'A1' if swp_channel == 'A0' else 'A0'
-                self.WriteVoltage(fixed_channel, v_fixed)
-                # Proceed with the single channel linear voltage sweep
-
-
-                voltage_data = numpy.array([]) # instantiate an empty numpy array to store the sweep data
-                v_set = voltage_interval.start # initialise the set-voltage
-                count = 0
-                #while v_set < voltage_interval.stop:
-
-                copy = None
-                for i in range(0, voltage_interval.Nsteps, 1):
-                    step_data = numpy.array([]) # instantiate an empty numpy array to hold the data for each step of the sweep
-                    self.WriteVoltage(swp_channel, v_set) # set the voltage at the analog output channel
-
-                    delay_seconds = 0.1
-                    plateau_key = None
-                    if isinstance(waveform_plataue_times, dict) and len(waveform_plataue_times) > 0:
-                        numeric_keys = [key for key in waveform_plataue_times if isinstance(key, (int, float))]
-                        plateau_key = min((key for key in numeric_keys if key > v_set), default=None)
-                        if plateau_key is not None:
-                            candidate_delay = waveform_plataue_times.get(plateau_key)
-                            if isinstance(candidate_delay, (int, float)) and candidate_delay >= 0.0:
-                                delay_seconds = candidate_delay
-
-                    time.sleep(delay_seconds)
-                    if copy is None or copy != delay_seconds:
-                        print(f'{v_set:.4f} V - delay of {delay_seconds:.2f} seconds ')
-                    copy = delay_seconds
-
-                    chnnl_values = self.ReadAverageVoltageAllChnnl(no_averages) # read the averaged voltages at all analog input channels
-                    # save the data
-                    step_data = numpy.append(step_data, v_set) # store the set-voltage value for this step
-                    step_data = numpy.append(step_data, chnnl_values) # store the  measured voltage values from all channels for this step
-                    # store the  set-voltage and the measured voltage values from all channels for this step
-                    # use append on the first step to initialise the voltage_data array
-                    # use vstack on subsequent steps to build up the 2D array of data
-                    voltage_data = numpy.append(voltage_data, step_data) if count == 0 else numpy.vstack([voltage_data, step_data])
-                    v_set = v_set + voltage_interval.delta # increment the set-voltage
-                    count = count + 1 if count == 0 else count # only need to increment count once to build up the array
-                print('Sweep complete')
-                self.ZeroIBM4() # ground the analog outputs
-                return voltage_data
-            else:
-                if not c1:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nNo comms established'
-                if not c2:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\noutput_channel outside range {A0, A1}'
-                if not c3:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nvoltage sweep bounds not defined'
-                if not c7:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nn_averages not defined correctly'
-                if not c8:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nv_fixed not in the correct range'
-                if not c11:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nvoltage limit exceeds v_fixed'
-                raise Exception        
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)   
-
-    def Get_Cal_from_IBM4(self, key=None, loud=True):
+    def Read_Cal_from_IBM4(self, key=None, loud=True):
         """
         Echo the saved data from the IBM4 display.
 

@@ -1,10 +1,8 @@
-import Calibration_class
+from Calibration_class import IBM4Calibrator
+import Control_Examples
+Cal = IBM4Calibrator(show_plots=False)
 
-
-cal_clas = Calibration_class.IBM4Calibrator(show_plots=True)
-
-cal_clas.calibrate()
-# test = {"a": 1, "b": 2}
-# cal_clas.save_dict_to_IBM4(test)
-cal_clas.get_cal()
-
+# Cal.calibrate()
+print("\n\n")
+Cal.Get_saved_values("0.1")
+print("\n\n")

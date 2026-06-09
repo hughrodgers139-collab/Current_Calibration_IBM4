@@ -119,7 +119,7 @@ def Save_Values(payload):
         nvm[1] = (n >> 8) & 0xFF
         nvm[2:2 + n] = msg
         nvm_saved = True
-
+        Get_saved_value()
         return file_saved or nvm_saved
     except Exception as ex:
         print('ERROR: Save_Message failed')
@@ -162,6 +162,7 @@ def Get_saved_value(key=None):
         except Exception:
             # Backward-compatible fallback for non-JSON payloads.
             if key is None:
+                print(decoded)
                 return decoded
             return None
     except Exception as ex:
@@ -175,11 +176,7 @@ while True:
         command = input()
         
         if command.startswith("*IDN"):
-            print('ISBY-UCC-RevA.1')
-            print('Current Source', Get_saved_value("Cal"), " mA/V, max 250 mA")
-            print('software: https://github.com/hughrodgers139-collab/Current_Calibration_IBM4')
-            print('for more information on the board and calibration, run Controle_Examples.Get_cal("help")')
-            print('to run calibration, run Controle_Examples.Message(resistor = ...)')
+            print('ISBY-UCC-RevA.1, Current Source: ', Get_saved_value("Cal"), ', mA/V, max 250 mA, software: https://github.com/hughrodgers139-collab/Current_Calibration_IBM4, run IBM4Calibrator.calibrate() to run calibration')
 
          #   """
         if command.startswith("Calibrate"):
