@@ -119,13 +119,11 @@ def Save_Values(payload):
         nvm[1] = (n >> 8) & 0xFF
         nvm[2:2 + n] = msg
         nvm_saved = True
-        Get_saved_value()
         return file_saved or nvm_saved
     except Exception as ex:
         print('ERROR: Save_Message failed')
         print(ex)
         return False
-
 def Get_saved_value(key=None):
     # Read full payload from filesystem first, then fall back to NVM.
     try:
@@ -152,23 +150,37 @@ def Get_saved_value(key=None):
 
         try:
             parsed = json.loads(decoded)
+
+            # --- NEW FEATURE: key == "ALL" returns full dictionary ---
+            if key == "ALL":
+                if isinstance(parsed, dict):
+                    print(parsed)
+                    return json.dumps(parsed)
+                return str(parsed)
+
+            # Normal behavior
             if key is None:
                 if isinstance(parsed, dict):
                     return json.dumps(parsed)
                 return str(parsed)
+
             if isinstance(parsed, dict) and key in parsed:
                 return str(parsed[key])
+
             return None
+
         except Exception:
             # Backward-compatible fallback for non-JSON payloads.
-            if key is None:
+            if key is None or key == "ALL":
                 print(decoded)
                 return decoded
             return None
+
     except Exception as ex:
         print('ERROR: Load_Dictionary failed')
         print(ex)
         return None
+
 
 
 while True:

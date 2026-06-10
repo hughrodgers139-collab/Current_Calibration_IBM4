@@ -13,23 +13,10 @@ Methods for testing the operation of the IBM4 Serial Controller Class
 R. Sheehan 12 - 6 - 2024
 """
 
-
 import time
-import os
 import numpy
 import Sweep_Interval
 import IBM4_Lib
-
-import matplotlib
-
-# Avoid Qt Wayland window-activation warnings on Linux Wayland sessions.
-if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
-    try:
-        matplotlib.use("TkAgg")
-    except Exception:
-        matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
 
 MOD_NAME_STR = "Control_Examples"
 
@@ -57,8 +44,6 @@ def Simple_Open_Close():
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
-        return None, None
-        return None, None
 
 def Step_Through_Voltages():
     """
@@ -107,7 +92,6 @@ def Step_Through_Voltages():
     except Exception as e:
         print(ERR_STATEMENT)
         print(e)
-        return None, None
 
 def Simple_Sweep():
     """
@@ -336,7 +320,6 @@ def Read_Waveform():
         input_ch = 'A3' # analog input channel on which readings are to be made
 
         # time the measurement
-
         start = time.time()
 
         
