@@ -1573,45 +1573,6 @@ class Ser_Iface(object):
             print(e)    
 
     # writing and reading data from IBM4 
-    
-    def Write_current(self, output_channel, set_current):
-                
-        """
-        This method interfaces with the IBM4 to perform a write operation where a current is output on one of the analog output pins of the IBM4.
-        The output channel must be 0 or 1, while the output value should be specified in Amperes (thus, floating point)
-
-        Inputs: 
-        output_channel is one of A0, A1
-        set_current is the desired current output value from the channel
-        set_current must be in the range [0.0, 250]
-        """
-
-        self.FUNC_NAME = ".WriteCurrent()" # use this in exception handling messages
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:
-            c1 = True if self.instr_obj.isOpen() else False # confirm that the instrument object has been instantiated
-            c2 = True if output_channel in self.Write_Chnnls else False # confirm that the output channel label is correct
-            c3 = True if set_current >= self.VMIN and set_current < self.VMAX or abs(set_current - self.VMAX) < self.DELTA_VMIN else False # confirm that the set current value is in range
-            c10 = c1 and c2 and c3 # if all conditions are true then write can proceed
-        
-            if c10:
-                write_cmd = 'Cur%(v1)d:%(v2)0.2f\r\n'%{"v1":self.Write_Chnnls[output_channel], "v2":set_current}
-                self.instr_obj.write( str.encode(write_cmd) ) # when using serial str must be encoded as bytes
-                read_result = self.instr_obj.read_until(size=write_cmd.__sizeof__()) # read_result returned as bytes and clear the return message  
-                read_result = self.instr_obj.read_until(b'\n',size=None) # read_result to clear the input buffer  
-            else:
-                if not c1:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nNo comms established'
-                if not c2:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\noutput_channel outside range {A0, A1}'
-                if not c3:
-                    self.ERR_STATEMENT = self.ERR_STATEMENT + '\nCould not write to instrument\nset_current %(v1)0.3f outside range [0.0, 3.3]'%{"v1":set_current}
-                raise Exception
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)
-
 
     def send_mes(self, msg, loud=True):
         self.FUNC_NAME = ".send_mes()"
