@@ -346,7 +346,7 @@ class IBM4Calibrator:
                 return results, slope_values, candidates, response_time
 
             max_slope_segment = max(range(len(slope_values)), key=lambda i: slope_values[i])
-            start_voltage = y[seg1["segment_start"]]
+            
             s1 = min(max_slope_segment + 1, len(results) - 1)
             s2 = min(max_slope_segment + 2, len(results) - 1)
             s3 = min(max_slope_segment + 3, len(results) - 1)
@@ -378,19 +378,18 @@ class IBM4Calibrator:
 
             i = 0
             response_idx = None
-            if abs(start_voltage- stable_point) / abs(stable_point) < 0.0001:
-                while i < len(candidates):
-                    idx = candidates[i]
-                    idx = min(max(0, idx), len(y) - 1)
-                    if stable_point == 0:
-                        close_enough = abs(y[idx] - stable_point) < tolerance
-                    else:
-                        close_enough = abs(y[idx] - stable_point) / abs(stable_point) < tolerance
+            while i < len(candidates):
+                idx = candidates[i]
+                idx = min(max(0, idx), len(y) - 1)
+                if stable_point == 0:
+                    close_enough = abs(y[idx] - stable_point) < tolerance
+                else:
+                    close_enough = abs(y[idx] - stable_point) / abs(stable_point) < tolerance
 
-                    if close_enough:
-                        response_idx = idx
-                        break
-                    i += 1
+                if close_enough:
+                    response_idx = idx
+                    break
+                i += 1
             else:
                 response_idx = seg1["segment_start"]
 
