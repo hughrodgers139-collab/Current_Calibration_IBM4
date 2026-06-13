@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import IBM4_Lib
 import Sweep_Interval
 
-class IBM4Calibrator:
+class IBM4Cal:
     """
     Integrated current calibration class for IBM4.
 
@@ -20,12 +20,6 @@ class IBM4Calibrator:
     - Compute max supported A0 voltages
     - Save/load calibration data to/from IBM4 firmware
     """
-    
-    MOD_NAME_STR = "IBM4_Lib"
-    FUNC_NAME = ".Ser_Iface()" # use this in exception handling messages
-    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
-    IBM4Port = None
-    instr_obj = None
 
     def __init__(
         self,
@@ -34,8 +28,12 @@ class IBM4Calibrator:
         approx_k_factor: float = 90.0,
         show_plots: bool = False,
     ):
-        FUNC_NAME = ".__init__()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME  
+        self.MOD_NAME_STR = "Calibration_class"
+        self.FUNC_NAME = ".IBM4Cal()" # use this in exception handling messages
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+        self.IBM4Port = None
+        self.instr_obj = None
+
         try:
             self.resistor = float(resistor)
             self.max_v = float(max_voltage_over_component)
@@ -51,7 +49,7 @@ class IBM4Calibrator:
             self.change_times = {}
             self.IBM4_Dict = {}
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     # ------------------------------------------------------------------
@@ -59,6 +57,7 @@ class IBM4Calibrator:
     # ------------------------------------------------------------------
 
     def calibrate(self) -> dict:
+        
         print("Starting calibration process...")
         """
         High-level calibration entry point.
@@ -66,8 +65,8 @@ class IBM4Calibrator:
         then runs CurCal to compute calibration factor and save results.
         """
             
-        FUNC_NAME = ".calibrate()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".calibrate()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             self.run_waveform_sweep_increase()
             self.run_waveform_sweep_decrease()
@@ -77,9 +76,8 @@ class IBM4Calibrator:
 
             print("Calibration complete. Results:")
 
-
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
 
@@ -90,8 +88,8 @@ class IBM4Calibrator:
     # ------------------------------------------------------------------
 
     def validate_inputs(self) -> None:
-        FUNC_NAME = ".validate_inputs()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".validate_inputs()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             # print("Validating inputs...")
             if self.resistor <= 0.0:
@@ -101,7 +99,7 @@ class IBM4Calibrator:
             if self.k <= 0.0:
                 raise ValueError("approx_k_factor must be > 0")
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     # ------------------------------------------------------------------
@@ -114,8 +112,8 @@ class IBM4Calibrator:
         Sweep A0 upwards, measure response times, store in self.waveform_plateau_times.
         """
 
-        FUNC_NAME = ".run_waveform_sweep_increase()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_waveform_sweep_increase()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             self.the_dev.ZeroIBM4() # ensure outputs are grounded before starting calibration
             time.sleep(0.5) # brief pause to allow hardware to stabilize
@@ -136,7 +134,7 @@ class IBM4Calibrator:
                 )
                 self.Charge_times.update(rt_dict)
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def run_waveform_sweep_decrease(self) -> None:
@@ -144,8 +142,8 @@ class IBM4Calibrator:
         """
         Sweep A0 downwards, measure response times, store in self.waveform_plateau_times.
         """
-        FUNC_NAME = ".run_waveform_sweep_decrease()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_waveform_sweep_decrease()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             self.the_dev.ZeroIBM4() # ensure outputs are grounded before starting calibration
             time.sleep(0.5) # brief pause to allow hardware to stabilize
@@ -164,7 +162,7 @@ class IBM4Calibrator:
                 )
                 self.Discharge_times.update(rt_dict)
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def run_waveform_sweep_change(self) -> None:
@@ -172,8 +170,8 @@ class IBM4Calibrator:
         """
         Sweep A0 in steps, measure response times, store in self.waveform_plateau_times.
         """
-        FUNC_NAME = ".run_waveform_sweep_change()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_waveform_sweep_change()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             self.the_dev.ZeroIBM4() # ensure outputs are grounded before starting calibration
             time.sleep(0.5) # brief pause to allow hardware to stabilize
@@ -196,7 +194,7 @@ class IBM4Calibrator:
                 )
                 self.change_times.update(rt_dict)
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
     
     # ------------------------------------------------------------------
@@ -214,8 +212,8 @@ class IBM4Calibrator:
         """
         Measure current waveform for a given A0 step to zero (change).
         """
-        FUNC_NAME = ".read_waveform_current_change()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".read_waveform_current_change()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
 
@@ -259,7 +257,7 @@ class IBM4Calibrator:
 
             return self.Discharge_times
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     # ------------------------------------------------------------------
@@ -272,8 +270,8 @@ class IBM4Calibrator:
         values,
         A0_voltage: float = 1.0,
         ):
-        FUNC_NAME = ".plateau_detection()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".plateau_detection()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             """
             Detect plateau by performing linear regression on segments and
@@ -408,15 +406,15 @@ class IBM4Calibrator:
 
             return results, slope_values, candidates, response_idx
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def smooth_signal(self, vals, window_size: int):
         """
         Apply a moving average to smooth the signal.
         """
-        FUNC_NAME = ".smooth_signal()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".smooth_signal()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             kernel = np.ones(window_size) / window_size
             pad_width = window_size // 2
@@ -429,7 +427,7 @@ class IBM4Calibrator:
 
             return  smoothed[: len(vals)]
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
   
     # ------------------------------------------------------------------
@@ -439,8 +437,8 @@ class IBM4Calibrator:
         """
         Compute allowed A0 voltages based on resistor and k-factor.
         """
-        FUNC_NAME = ".current_limit_calculator()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".current_limit_calculator()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             A0 = [0.02,
                 0.03,
@@ -464,15 +462,15 @@ class IBM4Calibrator:
                 if v <= 3.3 / resistor / (approx_k_factor / 1000.0) and v * approx_k_factor <= 250
             ]
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def run_current_cal(self) -> None:
         """
         Perform current calibration sweep (CurCal) using plateau times.
         """
-        FUNC_NAME = ".run_current_cal()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_current_cal()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             A0_min = 0.0
             A1_voltage = self.max_v
@@ -552,7 +550,7 @@ class IBM4Calibrator:
                 else:
                     print("Invalid input. Please enter 'y' or 'n'.")
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
     
     def SingleChannelSweep(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, waveform_plateau_times = None):
@@ -634,8 +632,8 @@ class IBM4Calibrator:
         """
         Send a message payload to the IBM4 firmware.
         """        
-        FUNC_NAME = ".save_dict_to_IBM4()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".save_dict_to_IBM4()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         print("Saving calibration data to IBM4 firmware...")
         local_dev = None
         try:
@@ -649,52 +647,43 @@ class IBM4Calibrator:
             if local_dev is not None:
                 del local_dev
 
+
+
+
+class Current_Control():
+    """
+    Class to control current settings on the IBM4 device.
+    """
+
+    def __init__(self):
+        self.MOD_NAME_STR = "Current_Control"
+        self.FUNC_NAME = ".Current_Control()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+        self.the_dev = IBM4_Lib.Ser_Iface()
+
+    def set_current(self, Current: float, Max_V: float, numb_avg: int = 10):
+        """
+        Set the current and maximum voltage on the IBM4 device.
+        """
+        try:
+            self.the_dev.Current(Current=Current, Max_V=Max_V, numb_avg=numb_avg)
+        except Exception as e:
+            print(f"{self.ERR_STATEMENT}: {e}")
+            raise
+
     def Get_saved_values(self, key: str | None = None):
         print("Retrieving calibration data from IBM4...")
         """
         Get saved calibration from IBM4 firmware.
         """
-        FUNC_NAME = ".Get_saved_values()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".Get_saved_values()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         if self.the_dev is None:
             self.the_dev = IBM4_Lib.Ser_Iface()
         try:
             response = self.the_dev.Read_Cal_from_IBM4(key=key)
-            print(response)
             return response
         finally:
             if self.the_dev is not None:
                 del self.the_dev
-
-
-
-class Output_current:
     
-    MOD_NAME_STR = "IBM4_Lib"
-    FUNC_NAME = ".Ser_Iface()" # use this in exception handling messages
-    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
-    IBM4Port = None
-    instr_obj = None
-
-    def __init__(self):
-        self.currnet = 0.0
-        self.max_voltage = 3.3
-        self.the_dev = IBM4_Lib.Ser_Iface()
-
-
-    def set_voltage(self, voltage):
-        self.the_dev.WriteVoltage('A1', set_voltage =  self.max_voltage)
-
-    def validate_current_input(self) -> None:
-        FUNC_NAME = ".validate_current_input()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
-        try:
-            if self.resistor <= 0.0:
-                raise ValueError("resistor must be > 0 Ohm")
-            if not (0.0 < self.max_v <= 3.3):
-                raise ValueError("max_voltage_over_component must be in (0, 3.3] V")
-            if self.k <= 0.0:
-                raise ValueError("approx_k_factor must be > 0")
-        except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
-            raise

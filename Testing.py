@@ -1,9 +1,6 @@
-from Calibration_class import IBM4Calibrator
-import time
-Cal = IBM4Calibrator(show_plots=False)
-print("\n")
-start = time.time()
-Cal.calibrate()
-end = time.time()
-diff = end - start
-print(diff)
+from Calibration_class import Current_Control 
+
+
+Current_Control = Current_Control()
+
+Current_Control.set_current(Current=20, Max_V=3.3, numb_avg=100)
