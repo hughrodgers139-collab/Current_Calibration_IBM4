@@ -1,3 +1,4 @@
+import ast
 import time
 import numpy as np
 import matplotlib
@@ -667,6 +668,18 @@ class Current_Control():
         """
         try:
             self.the_dev.Current(Current=Current, Max_V=Max_V, numb_avg=numb_avg)
+        except Exception as e:
+            print(f"{self.ERR_STATEMENT}: {e}")
+            raise
+
+    def sweep_current(self, Max_V: float, start: float = 0, end: float = 10, steps: int = 10):
+        """
+        Sweep the current from 0 to the specified Current value in steps.
+        """
+        try:
+            response =self.the_dev.Current_sweep(Max_V = Max_V, start=start, end=end, steps = steps)
+            print(response.shape)
+
         except Exception as e:
             print(f"{self.ERR_STATEMENT}: {e}")
             raise

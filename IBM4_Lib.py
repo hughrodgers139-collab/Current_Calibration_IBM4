@@ -75,6 +75,7 @@ import time
 import numpy
 import Sweep_Interval
 import subprocess
+import ast
 
 # define the class for interfacing to an IBM4
 
@@ -1721,7 +1722,7 @@ class Ser_Iface(object):
             
             if c1 and c3 and c7 and c8:
                 # Sending "echo <key>" asks firmware for a specific dictionary value.
-                write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(Current), "v2": str(Max_V), "v3": str(numb_avg)}
+                write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(Max_V), "v2": str(Current), "v3": str(numb_avg)}
 
                 check = write_cmd[len("Cur"):].strip()
 
@@ -1798,9 +1799,10 @@ class Ser_Iface(object):
 
             if c1 and c4 and c5 and c8:
                 # Sending "echo <key>" asks firmware for a specific dictionary value.
-                write_cmd = 'Cur %(v1)s:%(v2)s\r\n' % {"v1": str(end), "v2": str(Max_V)}
-                check = write_cmd[len("CurSweep"):].strip()
-                print("Sending command:", check)
+                # write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(end), "v2": str(Max_V), "v3": str(steps)}
+
+                write_cmd = 'sweep %(v1)s:%(v2)s:%(v3)s:%(v4)s\r\n' % {"v1": str(Max_V), "v2": str(start), "v3": str(end), "v4": str(steps)}
+
 
                 self.instr_obj.reset_input_buffer()
                 self.instr_obj.write(str.encode(write_cmd))
@@ -1808,11 +1810,12 @@ class Ser_Iface(object):
                 response = ""
                 sent_line = write_cmd.strip()
                 status_prefixes = (
-                    "",
+                    "v",
                     'ERROR:',
                 )
                 fallback_line = ""
-                for _ in range(10):
+                responce = numpy.array([])  # Initialize an empty numpy array to store the responses
+                for i in range(steps+3):  # Read enough lines to cover all steps and potential echoes
                     read_result = self.instr_obj.read_until(b'\n', size=None)
                     line = read_result.decode(errors='replace').strip()
                     if not line:
@@ -1820,24 +1823,17 @@ class Ser_Iface(object):
                     if line == sent_line or line.startswith('echo'):
                         continue
                     if line.startswith(status_prefixes):
-                        response = line
-                        break
+                        line = (numpy.array(line.replace('v', '')))
+                        response = numpy.vstack([response, line])
+
                     if not fallback_line:
                         fallback_line = line
 
-                if not response:
-                    response = fallback_line
-
-                saved_val = None
-                if response.startswith('V'):
-                    saved_val = response
-                elif response.startswith('ERROR:'):
-                    saved_val = None
-
                 if loud:
-                    print(response)
+                    print(responce)
                 self.ZeroIBM4() 
-                return saved_val
+
+                return responce
             else:
                 if not c1:
                     self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'

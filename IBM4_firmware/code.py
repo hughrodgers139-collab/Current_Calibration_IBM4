@@ -17,6 +17,7 @@ pwm11 = pwmio.PWMOut(board.D11, duty_cycle=2 ** 15)
 pwm12 = pwmio.PWMOut(board.D12, duty_cycle=2 ** 15)
 pwm13 = pwmio.PWMOut(board.D13, duty_cycle=2 ** 15)
 
+
 # For listening for serial inputs
 ####
 # Define names for In and Out pins
@@ -93,11 +94,12 @@ def Simple_Read():
         # format string to output to nearest 10 mV
         #output_str = '%(v2)0.2f, %(v3)0.2f, %(v4)0.2f, %(v5)0.2f'%{"v2":V2real, "v3":V3real, "v4":V4real, "v5":V5real}
         DC_offset = get_voltage(Vin6) # read the DC offset of the BP-UP circuit
-        output_str = '%(v2)0.2f, %(v3)0.2f, %(v4)0.2f, %(v5)0.2f, %(v6)0.2f'%{"v2":V2real, "v3":V3real, "v4":V4real, "v5":V5real, "v6":DC_offset}
+        output_str = '%(v2)0.5f, %(v3)0.5f, %(v4)0.5f, %(v5)0.5f, %(v6)0.5f'%{"v2":V2real, "v3":V3real, "v4":V4real, "v5":V5real, "v6":DC_offset}
         print(output_str) # Prints to serial to be read by LabVIEW
     except Exception as e:
         print('\nERROR: Simple_Read\n')
         print(e)
+
 def Save_Values(payload):
     # Store full payload to filesystem and mirror to NVM when possible.
     try:
@@ -131,6 +133,47 @@ def Save_Values(payload):
         print('ERROR: Save_Message failed')
         print(ex)
         return False
+
+def add_to_saved_value(key, value):
+    # Read full payload from filesystem first, then fall back to NVM.
+    try:
+        decoded = None
+
+        try:
+            with open("/saved_payload.json", "r") as fp:
+                decoded = fp.read()
+        except Exception:
+            decoded = None
+
+        if not decoded:
+            # Fallback to NVM: bytes 0-1 = length (little-endian), bytes 2+ = UTF-8 data
+            nvm = microcontroller.nvm
+            n = nvm[0] | (nvm[1] << 8)
+            max_len = len(nvm) - 2
+            if n == 0 or n > max_len:
+                return False
+            data = bytes(nvm[2:2 + n])
+            decoded = data.decode('utf-8')
+
+        if not decoded:
+            return False
+
+        try:
+            parsed = json.loads(decoded)
+            if isinstance(parsed, dict):
+                parsed[key] = value
+                Save_Values(parsed)
+                return True
+            else:
+                return False
+        except Exception:
+            return False
+
+    except Exception as ex:
+        print('ERROR: add_to_saved_value failed')
+        print(ex)
+        return False
+    
 def Get_saved_value(key=None):
     # Read full payload from filesystem first, then fall back to NVM.
     try:
@@ -525,9 +568,9 @@ while True:
         elif command.startswith("Cur"):
             try:
                 key = command[len("Cur"):].strip()
-                Current, max_v, num_avg = key.split(":", 2)
+                max_v, Current, num_avg = key.split(":", 2)
                 Cal = float(Get_saved_value("cal"))
-
+                num_avg = int(num_avg)
                 if Cal is None:
                     print('ERROR', 'Calibration value not found, cannot perform CurSweep')
                 else:
@@ -535,13 +578,21 @@ while True:
                     max_v = float(max_v)
                     Vout0.value = dac_value(Current) # Set the voltage
                     Vout1.value = dac_value(max_v) # Set the voltage
+                    v2, v3, v4, v5, d2 = 0, 0, 0, 0, 0
+                    for i in range(num_avg):
+                        v2 += float(get_voltage(Vin2))
+                        v3 += float(get_voltage(Vin3))
+                        v4 += float(get_voltage(Vin4))
+                        v5 += float(get_voltage(Vin5))
+                        d2 += float(get_voltage(Vin6))
+                    num_avg = float(num_avg)
+                    Voltage = [v2/num_avg, v3/num_avg, v4/num_avg, v5/num_avg, d2/num_avg]
                     time.sleep(1)
                 max_v = float(max_v)
                 Vout0.value = dac_value(Current) # Set the voltage
                 Vout1.value = dac_value(max_v) # Set the voltage
-                time.sleep(0.1)
                 
-                Voltage = [get_voltage(Vin2), get_voltage(Vin3), get_voltage(Vin4), get_voltage(Vin5), get_voltage(Vin6)]
+                
                 print('', Voltage)
             except ValueError as ex:
                 print('')
@@ -550,16 +601,32 @@ while True:
                 print("PWMset", ThePin, "=", str(SetPWM), end=' ')
                 print()
 
-        elif command.startswith("CurSweep"):
+        elif command.startswith("sweep"):
             try:
-                key = command[len("CurSweep"):].strip()
-                max_v, start, end, steps = key.split(":", 3)  
+                key = command[len("sweep"):].strip()
+                max_v, start, end, steps = key.split(":", 3)
                 max_v = float(max_v)
                 start = float(start)
-                end = float(end)
-                steps = int(steps)  
-                Voltage = [max_v, start, end, steps]
-                print('', Voltage)
+                Current = float(end)
+                steps = int(steps)
+
+                Cal = float(Get_saved_value("cal"))
+
+                if Cal is None:
+                    print('ERROR', 'Calibration value not found, cannot perform CurSweep')
+                else:
+                    Current = float(Current)/Cal
+                    Voltage = []
+                    for i in range(steps):
+                        Vout1.value = dac_value(max_v) # Set the voltage
+                        Vout0.value = dac_value(Current * (i / (steps - 1))) # Set the voltage
+                        time.sleep(0.1)
+                        Voltage = [get_voltage(Vin2), 
+                                    get_voltage(Vin3), 
+                                    get_voltage(Vin4), 
+                                    get_voltage(Vin6)]
+                        print('v', Voltage)
+
             except ValueError as ex:
                 print('')
                 print(ex)
@@ -569,8 +636,8 @@ while True:
         
         else:
             print('\nERROR: Unknown command entered\n')
-#    else:
-#        print('If you can read this something has gone very wrong. ')
+    else:
+        print('If you can read this something has gone very wrong. ')
 
 
 
