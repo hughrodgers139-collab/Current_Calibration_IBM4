@@ -1,10 +1,12 @@
 import time
 import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import IBM4_Lib
 import Sweep_Interval
 
-class IBM4Calibrator:
+class IBM4Cal:
     """
     Integrated current calibration class for IBM4.
 
@@ -18,12 +20,6 @@ class IBM4Calibrator:
     - Compute max supported A0 voltages
     - Save/load calibration data to/from IBM4 firmware
     """
-    
-    MOD_NAME_STR = "IBM4_Lib"
-    FUNC_NAME = ".Ser_Iface()" # use this in exception handling messages
-    ERR_STATEMENT = "Error: " + MOD_NAME_STR + FUNC_NAME
-    IBM4Port = None
-    instr_obj = None
 
     def __init__(
         self,
@@ -32,8 +28,12 @@ class IBM4Calibrator:
         approx_k_factor: float = 90.0,
         show_plots: bool = False,
     ):
-        FUNC_NAME = ".__init__()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME  
+        self.MOD_NAME_STR = "Calibration_class"
+        self.FUNC_NAME = ".IBM4Cal()" # use this in exception handling messages
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+        self.IBM4Port = None
+        self.instr_obj = None
+
         try:
             self.resistor = float(resistor)
             self.max_v = float(max_voltage_over_component)
@@ -47,9 +47,9 @@ class IBM4Calibrator:
             self.Charge_times = {}
             self.Discharge_times = {}
             self.change_times = {}
-            self.waveform_plateau_times = {}
+            self.IBM4_Dict = {}
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     # ------------------------------------------------------------------
@@ -57,6 +57,7 @@ class IBM4Calibrator:
     # ------------------------------------------------------------------
 
     def calibrate(self) -> dict:
+        
         print("Starting calibration process...")
         """
         High-level calibration entry point.
@@ -64,8 +65,8 @@ class IBM4Calibrator:
         then runs CurCal to compute calibration factor and save results.
         """
             
-        FUNC_NAME = ".calibrate()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".calibrate()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             self.run_waveform_sweep_increase()
             self.run_waveform_sweep_decrease()
@@ -73,23 +74,24 @@ class IBM4Calibrator:
 
             self.run_current_cal()
 
+            print("Calibration complete. Results:")
 
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
 
-        return dict(self.waveform_plateau_times)
+        return dict(self.IBM4_Dict)
 
     # ------------------------------------------------------------------
     # Internal: validation
     # ------------------------------------------------------------------
 
     def validate_inputs(self) -> None:
-        FUNC_NAME = ".validate_inputs()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".validate_inputs()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
-            print("Validating inputs...")
+            # print("Validating inputs...")
             if self.resistor <= 0.0:
                 raise ValueError("resistor must be > 0 Ohm")
             if not (0.0 < self.max_v <= 3.3):
@@ -97,7 +99,7 @@ class IBM4Calibrator:
             if self.k <= 0.0:
                 raise ValueError("approx_k_factor must be > 0")
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     # ------------------------------------------------------------------
@@ -110,9 +112,11 @@ class IBM4Calibrator:
         Sweep A0 upwards, measure response times, store in self.waveform_plateau_times.
         """
 
-        FUNC_NAME = ".run_waveform_sweep_increase()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_waveform_sweep_increase()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
+            self.the_dev.ZeroIBM4() # ensure outputs are grounded before starting calibration
+            time.sleep(0.5) # brief pause to allow hardware to stabilize
             A1_voltage = self.max_v
             A0_values = self.current_limit_calculator(self.resistor, self.k)
 
@@ -121,17 +125,16 @@ class IBM4Calibrator:
                                 "max supported A0 is below 0.1 V")
             
             self.the_dev.WriteVoltage('A1', set_voltage =  A1_voltage)
-
+            self.last_time = None
             for A0_voltage in A0_values:
                 rt_dict = self.read_waveform_current_change(
                     A0_start=0.0,
                     A0_end=A0_voltage,
-                    Charge_times=self.Charge_times,
                     prefix = "charge_"
                 )
                 self.Charge_times.update(rt_dict)
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def run_waveform_sweep_decrease(self) -> None:
@@ -139,26 +142,27 @@ class IBM4Calibrator:
         """
         Sweep A0 downwards, measure response times, store in self.waveform_plateau_times.
         """
-        FUNC_NAME = ".run_waveform_sweep_decrease()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_waveform_sweep_decrease()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
+            self.the_dev.ZeroIBM4() # ensure outputs are grounded before starting calibration
+            time.sleep(0.5) # brief pause to allow hardware to stabilize
             A1_voltage = self.max_v
 
             A0_values = self.current_limit_calculator(self.resistor, self.k)
 
             self.the_dev.WriteVoltage('A1', set_voltage =  A1_voltage)
-
+            self.last_time = None
             for A0_voltage in A0_values:
                 rt_dict = self.read_waveform_current_change(
                     A0_start=A0_voltage,
                     A0_end=0.0,
                     flip=True,
-                    Discharge_times=self.Discharge_times,
                     prefix = "discharge_"
                 )
                 self.Discharge_times.update(rt_dict)
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def run_waveform_sweep_change(self) -> None:
@@ -166,31 +170,33 @@ class IBM4Calibrator:
         """
         Sweep A0 in steps, measure response times, store in self.waveform_plateau_times.
         """
-        FUNC_NAME = ".run_waveform_sweep_change()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_waveform_sweep_change()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
+            self.the_dev.ZeroIBM4() # ensure outputs are grounded before starting calibration
+            time.sleep(0.5) # brief pause to allow hardware to stabilize
             A1_voltage = self.max_v
 
             A0_values = self.current_limit_calculator(self.resistor, self.k)
             A0_range = A0_values[-1]
-            no_steps = max(int(A0_range / 0.1), 2)
+            no_steps = max(int(A0_range / 0.025), 2)
             A0_10 = np.linspace(0.0, A0_range, no_steps)
 
             self.the_dev.WriteVoltage('A1', set_voltage =  A1_voltage)
-
+            self.last_time = None
             for i in range(len(A0_10)-1):
                 A0_start = A0_10[i]
                 A0_end = A0_10[i+1]
                 rt_dict = self.read_waveform_current_change(
                     A0_start=A0_start,
                     A0_end=A0_end,
-                    Discharge_times=self.Discharge_times,
                     prefix = "change_"
                 )
-                self.Discharge_times.update(rt_dict)
+                self.change_times.update(rt_dict)
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
+    
     # ------------------------------------------------------------------
     # Internal: waveform measurement helpers
     # ------------------------------------------------------------------
@@ -199,39 +205,22 @@ class IBM4Calibrator:
         self,
         A0_start: float,
         A0_end: float,
-        Discharge_times: dict | None = None,
-        Charge_times: dict | None = None,
+
         flip: bool = False,
         prefix: str = "",
     ):
-        # Ensure Charge_times is valid
-        if Charge_times is None:
-            Charge_times = self.Charge_times
-
-        if Discharge_times is None:
-            Discharge_times = self.Discharge_times
-
         """
         Measure current waveform for a given A0 step to zero (change).
         """
-        FUNC_NAME = ".read_waveform_current_change()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".read_waveform_current_change()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
-            self.the_dev.WriteVoltage('A0', set_voltage =  A0_start)
-            
-            key = prefix + f"{max(A0_start, A0_end):.4f}"
-            delay = Charge_times.get(key, 0.0)
-            time.sleep(delay)
 
+            key =  f"{prefix}{max(A0_start, A0_end):.2f}"
+            time.sleep(0.5)
 
-    
-            print(f"Measuring change waveform for A0={max(A0_start, A0_end):.2f} V...")
-
-            if Discharge_times is None or not isinstance(Discharge_times, dict):
-                Discharge_times = {} 
-
-            Nreads = 5000
+            Nreads = 2000
             input_ch = "A3"
             self.the_dev.WriteVoltage('A0', set_voltage =  A0_end)
             start = time.time()
@@ -244,27 +233,31 @@ class IBM4Calibrator:
             times = np.linspace(0, total_time, Nreads)
 
             smooth_waveform = self.smooth_signal(vals, window_size=200)
-            smooth_waveform = smooth_waveform # upside down for decrease measurement
+            if flip:
+                smooth_waveform = -smooth_waveform # upside down for decrease measurement
 
             _, _, _, response_idx = self.plateau_detection(
                 times,
                 smooth_waveform,
-                segment_length=250,
-                A0_voltage=A0_end
+                A0_voltage=max(A0_start, A0_end)
             )
-
+            
             plateau_time_seconds = (
                 times[response_idx]
                 if len(times) > response_idx
                 else response_idx * measurement_time
             )
+            if self.last_time:
+                if plateau_time_seconds > self.last_time:
+                    plateau_time_seconds = self.last_time
+            
+            self.last_time = plateau_time_seconds
+            
+            self.Discharge_times[key] = round(float(plateau_time_seconds), 4)
 
-            voltage_key = round(float(A0_end), 4)
-            Discharge_times[voltage_key] = round(float(plateau_time_seconds), 4)
-
-            return Discharge_times
+            return self.Discharge_times
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     # ------------------------------------------------------------------
@@ -275,11 +268,10 @@ class IBM4Calibrator:
         self,
         times,
         values,
-        segment_length: int = 250,
         A0_voltage: float = 1.0,
         ):
-        FUNC_NAME = ".plateau_detection()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".plateau_detection()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             """
             Detect plateau by performing linear regression on segments and
@@ -301,13 +293,14 @@ class IBM4Calibrator:
             tolerance = 0.01
 
             if self.show_plots:
-                plt.figure(figsize=(10, 6))
+                plt.figure(figsize=(12, 8))
+                plt.plot(t, y, label="Measured Signal")
                 plt.xlabel("Time (s)")
                 plt.ylabel("Voltage (V)")
                 plt.title(f"Vin: {A0_voltage} V & A1")
 
-            for start in range(0, n, segment_length):
-                end = min(start + segment_length, n)
+            for start in range(0, n, 250):
+                end = min(start + 250, n)
                 t_seg = t[start:end]
                 y_seg = y[start:end]
 
@@ -342,18 +335,20 @@ class IBM4Calibrator:
                     plt.plot(t_seg, y_seg, "o")
                     plt.plot(t_seg, y_pred, "r--")
 
-                if abs(A0_voltage) > 1e-12:
+                if A0_voltage > 1e-12:
                     slope_values.append(slope / A0_voltage)
                 else:
                     slope_values.append(slope)
-
+    
             if len(results) == 0 or len(slope_values) == 0:
                 return results, slope_values, candidates, response_time
 
             max_slope_segment = max(range(len(slope_values)), key=lambda i: slope_values[i])
+            
             s1 = min(max_slope_segment + 1, len(results) - 1)
             s2 = min(max_slope_segment + 2, len(results) - 1)
             s3 = min(max_slope_segment + 3, len(results) - 1)
+            
 
             seg1 = results[s1]
             seg2 = results[s2]
@@ -363,25 +358,24 @@ class IBM4Calibrator:
 
             candidates = [
                 seg1["segment_start"],
-                seg1["segment_start"] + int(0.25 * segment_length),
-                seg1["segment_start"] + int(0.5 * segment_length),
-                seg1["segment_start"] + int(0.75 * segment_length),
+                seg1["segment_start"] + int(0.25 * 250),
+                seg1["segment_start"] + int(0.5 * 250),
+                seg1["segment_start"] + int(0.75 * 250),
                 seg1["segment_end"],
                 seg2["segment_start"],
-                seg2["segment_start"] + int(0.25 * segment_length),
-                seg2["segment_start"] + int(0.5 * segment_length),
-                seg2["segment_start"] + int(0.75 * segment_length),
+                seg2["segment_start"] + int(0.25 * 250),
+                seg2["segment_start"] + int(0.5 * 250),
+                seg2["segment_start"] + int(0.75 * 250),
                 seg2["segment_end"],
                 seg3["segment_start"],
-                seg3["segment_start"] + int(0.25 * segment_length),
-                seg3["segment_start"] + int(0.5 * segment_length),
-                seg3["segment_start"] + int(0.75 * segment_length),
+                seg3["segment_start"] + int(0.25 * 250),
+                seg3["segment_start"] + int(0.5 * 250),
+                seg3["segment_start"] + int(0.75 * 250),
                 seg3["segment_end"],
             ]
 
             i = 0
             response_idx = None
-
             while i < len(candidates):
                 idx = candidates[i]
                 idx = min(max(0, idx), len(y) - 1)
@@ -394,6 +388,8 @@ class IBM4Calibrator:
                     response_idx = idx
                     break
                 i += 1
+            else:
+                response_idx = seg1["segment_start"]
 
             if response_idx is None:
                 response_idx = seg3["segment_end"]
@@ -410,15 +406,15 @@ class IBM4Calibrator:
 
             return results, slope_values, candidates, response_idx
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def smooth_signal(self, vals, window_size: int):
         """
         Apply a moving average to smooth the signal.
         """
-        FUNC_NAME = ".smooth_signal()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".smooth_signal()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             kernel = np.ones(window_size) / window_size
             pad_width = window_size // 2
@@ -426,9 +422,12 @@ class IBM4Calibrator:
             padded_vals = np.pad(vals, pad_width, mode="edge")
             smoothed = np.convolve(padded_vals, kernel, mode="valid")
 
+            padded_vals = np.pad(smoothed, pad_width, mode="edge")
+            smoothed = np.convolve(padded_vals, kernel, mode="valid")
+
             return  smoothed[: len(vals)]
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
   
     # ------------------------------------------------------------------
@@ -438,8 +437,8 @@ class IBM4Calibrator:
         """
         Compute allowed A0 voltages based on resistor and k-factor.
         """
-        FUNC_NAME = ".current_limit_calculator()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".current_limit_calculator()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             A0 = [0.02,
                 0.03,
@@ -463,15 +462,15 @@ class IBM4Calibrator:
                 if v <= 3.3 / resistor / (approx_k_factor / 1000.0) and v * approx_k_factor <= 250
             ]
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def run_current_cal(self) -> None:
         """
         Perform current calibration sweep (CurCal) using plateau times.
         """
-        FUNC_NAME = ".run_current_cal()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".run_current_cal()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         try:
             A0_min = 0.0
             A1_voltage = self.max_v
@@ -491,7 +490,7 @@ class IBM4Calibrator:
                 "A0",
                 interval,
                 v_fixed=A1_voltage,
-                waveform_plateau_times = self.waveform_plateau_times
+                waveform_plateau_times = self.IBM4_Dict
             )
 
 
@@ -501,20 +500,26 @@ class IBM4Calibrator:
             ch = 3
             sweep_data[:, ch] = sweep_data[:, ch] * 1000.0 / self.resistor   
 
-            cal_factor = np.polyfit(sweep_data[:, 0], sweep_data[:, ch], 1)
-            self.waveform_plateau_times["Cal"] = cal_factor[0]
-            self.waveform_plateau_times["Cal_intercept"] = cal_factor[1]
-            self.waveform_plateau_times["R2"] = np.corrcoef(sweep_data[:, 0], sweep_data[:, ch])[0, 1] ** 2
-            # self.waveform_plateau_times["resistor"] = self.resistor
-            # self.waveform_plateau_times["charge_times"] = self.Charge_times
-            # self.waveform_plateau_times["discharge_times"] = self.Discharge_times
+            self.cal_factor = np.polyfit(sweep_data[:, 0], sweep_data[:, ch], 1)
+
+            self.IBM4_Dict["cal"] = self.cal_factor[0]
+            self.IBM4_Dict["cal_intercept"] = self.cal_factor[1]
+            self.IBM4_Dict["r2"] = np.corrcoef(sweep_data[:, 0], sweep_data[:, ch])[0, 1] ** 2
+            self.IBM4_Dict["resistor"] = self.resistor
+            self.IBM4_Dict["currents_tested"] = [f"{A0 * self.cal_factor[0]}" for A0 in A0_max_list]
+            self.IBM4_Dict["help"] = 'use Key = ALL to see saved values' 
+
+            self.IBM4_Dict.update(self.Charge_times)
+            self.IBM4_Dict.update(self.Discharge_times)
+            self.IBM4_Dict.update(self.change_times)
+            
 
             plt.plot(sweep_data[:, 0], sweep_data[:, ch], "o-")
             plt.plot(
                 sweep_data[:, 0],
-                cal_factor[0] * sweep_data[:, 0] + cal_factor[1],
+                self.cal_factor[0] * sweep_data[:, 0] + self.cal_factor[1],
                 "r--",
-                label=f"Cal_factor = {cal_factor[0]:0.2f} mA/V",
+                label=f"Cal_factor = {self.cal_factor[0]:0.2f} mA/V",
             )
             plt.xlabel("Voltage (mV)")
             plt.ylabel("Current (mA)")
@@ -529,18 +534,15 @@ class IBM4Calibrator:
             )
             plt.show()
             
-            self.waveform_plateau_times["Current_times"] = A0_max_list
-            #__________________________________________________________________________________________________________________________________________________________________________________________
+  
+            for key, value in self.IBM4_Dict.items():
+                print(f"{key}: {value}")
 
-            self.waveform_plateau_times["help"] = '"Cal" for calibration factor in mA/V Cal_intercept for intercept in mA, \n "R2" for R-squared,\n "resistor" for sense resistor.' 
-            self.waveform_plateau_times.update(self.Charge_times)
-            self.waveform_plateau_times.update(self.Discharge_times)
-            self.waveform_plateau_times.update(self.change_times)
-            #__________________________________________________________________________________________________________________________________________________________________________________________
+            
             while True:    
                 choise = input("Do you want to save the calibration data to IBM4 firmware? (y/n): ").strip().lower()
                 if choise == 'y':
-                    self.save_dict_to_IBM4(self.waveform_plateau_times)
+                    self.save_dict_to_IBM4(self.IBM4_Dict)
                     break
                 elif choise == 'n':
                     print("Calibration data not saved to IBM4 firmware.")
@@ -548,7 +550,7 @@ class IBM4Calibrator:
                 else:
                     print("Invalid input. Please enter 'y' or 'n'.")
         except Exception as e:
-            print(f"{ERR_STATEMENT}: {e}")
+            print(f"{self.ERR_STATEMENT}: {e}")
             raise
     
     def SingleChannelSweep(self, swp_channel, voltage_interval:Sweep_Interval.SweepSpace, v_fixed = 0.0, no_averages = 10, waveform_plateau_times = None):
@@ -630,8 +632,8 @@ class IBM4Calibrator:
         """
         Send a message payload to the IBM4 firmware.
         """        
-        FUNC_NAME = ".save_dict_to_IBM4()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".save_dict_to_IBM4()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         print("Saving calibration data to IBM4 firmware...")
         local_dev = None
         try:
@@ -645,31 +647,43 @@ class IBM4Calibrator:
             if local_dev is not None:
                 del local_dev
 
+
+
+
+class Current_Control():
+    """
+    Class to control current settings on the IBM4 device.
+    """
+
+    def __init__(self):
+        self.MOD_NAME_STR = "Current_Control"
+        self.FUNC_NAME = ".Current_Control()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+        self.the_dev = IBM4_Lib.Ser_Iface()
+
+    def set_current(self, Current: float, Max_V: float, numb_avg: int = 10):
+        """
+        Set the current and maximum voltage on the IBM4 device.
+        """
+        try:
+            self.the_dev.Current(Current=Current, Max_V=Max_V, numb_avg=numb_avg)
+        except Exception as e:
+            print(f"{self.ERR_STATEMENT}: {e}")
+            raise
+
     def Get_saved_values(self, key: str | None = None):
         print("Retrieving calibration data from IBM4...")
         """
         Get saved calibration from IBM4 firmware.
         """
-        FUNC_NAME = ".Get_saved_values()"
-        ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + FUNC_NAME
+        self.FUNC_NAME = ".Get_saved_values()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         if self.the_dev is None:
             self.the_dev = IBM4_Lib.Ser_Iface()
         try:
             response = self.the_dev.Read_Cal_from_IBM4(key=key)
-            print(response)
             return response
         finally:
             if self.the_dev is not None:
                 del self.the_dev
-
-'''
-class Output_current:
-    def __init__(self, current_cal_factor: float, intercept: float = 0.0):
-        self.current_cal_factor = current_cal_factor
-        self.intercept = intercept
-
-    def voltage_to_current(self, voltage: float) -> float:
-        return self.current_cal_factor * voltage + self.intercept
-'''
-
-
+    

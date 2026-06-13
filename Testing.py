@@ -1,8 +1,6 @@
-from Calibration_class import IBM4Calibrator
-import Control_Examples
-Cal = IBM4Calibrator(show_plots=False)
+from Calibration_class import Current_Control 
 
-# Cal.calibrate()
-print("\n\n")
-Cal.Get_saved_values("ALL")
-print("\n\n")
+
+Current_Control = Current_Control()
+
+Current_Control.set_current(Current=20, Max_V=3.3, numb_avg=100)

@@ -74,6 +74,15 @@ def Simple_Vout_A1(command):
         print('\nERROR: Simple_Vout_A1\n')
         print(e)
 
+def Simple_V():
+    # If the user inputs command a<value> this will be interpreted as setting A0 to the volt level <value>
+    try:
+        Vout0.value = dac_value(0.5) # Set the voltage
+        Vout0.value = dac_value(3.2) # Set the voltage
+    except Exception as e:
+        print('\nERROR: Simple_Vout_A0\n')
+        print(e)
+
 def Simple_Read():
     try:
         # High-impedance voltage reading Vout = Vin
@@ -89,8 +98,6 @@ def Simple_Read():
     except Exception as e:
         print('\nERROR: Simple_Read\n')
         print(e)
-
-
 def Save_Values(payload):
     # Store full payload to filesystem and mirror to NVM when possible.
     try:
@@ -119,13 +126,11 @@ def Save_Values(payload):
         nvm[1] = (n >> 8) & 0xFF
         nvm[2:2 + n] = msg
         nvm_saved = True
-        Get_saved_value()
         return file_saved or nvm_saved
     except Exception as ex:
         print('ERROR: Save_Message failed')
         print(ex)
         return False
-
 def Get_saved_value(key=None):
     # Read full payload from filesystem first, then fall back to NVM.
     try:
@@ -152,33 +157,42 @@ def Get_saved_value(key=None):
 
         try:
             parsed = json.loads(decoded)
+
+            # --- NEW FEATURE: key == "ALL" returns full dictionary ---
+            if key == "ALL":
+                if isinstance(parsed, dict):
+                    print(parsed)
+                    return json.dumps(parsed)
+                return str(parsed)
+
+            # Normal behavior
             if key is None:
                 if isinstance(parsed, dict):
                     return json.dumps(parsed)
                 return str(parsed)
+
             if isinstance(parsed, dict) and key in parsed:
                 return str(parsed[key])
+
             return None
+
         except Exception:
             # Backward-compatible fallback for non-JSON payloads.
-            if key is None:
+            if key is None or key == "ALL":
                 print(decoded)
                 return decoded
             return None
+
     except Exception as ex:
         print('ERROR: Load_Dictionary failed')
         print(ex)
         return None
 
-
 while True:
     if supervisor.runtime.serial_bytes_available:   # Listens for a serial command
         command = input()
-        
         if command.startswith("*IDN"):
-            print('ISBY-UCC-RevA.1, Current Source: ', Get_saved_value("Cal"), ', mA/V, max 250 mA, software: https://github.com/hughrodgers139-collab/Current_Calibration_IBM4, run IBM4Calibrator.calibrate() to run calibration')
-
-         #   """
+            print('ISBY-UCC-RevA.1')
         if command.startswith("Calibrate"):
             try:
                 with open("/Calibration.txt", "r") as fp:
@@ -198,7 +212,6 @@ while True:
         elif command.startswith("Mode"):
             TheMode = int(command[4:])
             print(TheMode)
-            
         elif command.startswith("PWM"):
             try:
                 Tokens = command[3:].split(":")
@@ -226,7 +239,6 @@ while True:
             else:
                 print("PWMset", ThePin, "=", str(SetPWM), end=' ')
                 print()
-
         elif command.startswith("Write"):
             try:
                 Tokens = command[5:].split(":")
@@ -250,7 +262,6 @@ while True:
             else:
                 print("Vset", Chan, "=", str(SetVoltage), end=' ')
                 print()
-
         elif command.startswith("Read"):
             try:
                 Tokens = command[4:].split(":")
@@ -291,7 +302,6 @@ while True:
                     for i in range(1, N):
                         print(",", str((Values[i]-Ref)*Mult), end=' ')
                     print()
-
         elif command.startswith("Average"):
             try:
                 Tokens = command[7:].split(":")
@@ -330,7 +340,6 @@ while True:
                         Value += get_voltage(Pin)
                     Value /= N
                     print("Average", Chan, "=", str((Value-Ref)*Mult))
-
         elif command.startswith("BRead"):
             try:
                 Tokens = command[5:].split(":")
@@ -364,7 +373,6 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]), end=' ')
                     print()
-
         elif command.startswith("Diff_Read"):
             try:
                 Tokens = command[9:].split(":")
@@ -414,7 +422,6 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]*Mult), end=' ')
                     print()
-
         elif command.startswith("Diff_Average"):
             try:
                 Tokens = command[12:].split(":")
@@ -462,7 +469,6 @@ while True:
                         Value += (get_voltage(Pplus) - get_voltage(Pminus))
                     Value /= N
                     print("Average =", str(Value*Mult))
-
         elif command.startswith("Diff_BRead"):
             try:
                 Tokens = command[10:].split(":")
@@ -509,67 +515,63 @@ while True:
                     for i in range(1, N):
                         print(",", str(Values[i]), end=' ')
                     print()
-        
         elif command.startswith("a"):
             Simple_Vout_A0(command)
         elif command.startswith("b"):
             Simple_Vout_A1(command)
         elif command.startswith("l"):
             Simple_Read()
-
-
-        elif command.startswith("Message"):
+        
+        elif command.startswith("Cur"):
             try:
-                payload = command[len("Message"):].strip()
-                if payload:
-                    payload_to_save = payload
-                    # If payload looks like a JSON object, parse it so Save_Message
-                    # receives a dictionary rather than a plain string.
-                    if payload.startswith("{") and payload.endswith("}"):
-                        try:
-                            parsed = json.loads(payload)
-                            if isinstance(parsed, dict):
-                                payload_to_save = parsed
-                        except Exception:
-                            payload_to_save = payload
+                key = command[len("Cur"):].strip()
+                Current, max_v, num_avg = key.split(":", 2)
+                Cal = float(Get_saved_value("cal"))
 
-                    ok = Save_Values(payload_to_save)
-                    if ok:
-                        print('Message saved: ' + payload)
-                    else:
-                        print('ERROR: Could not save message')
+                if Cal is None:
+                    print('ERROR', 'Calibration value not found, cannot perform CurSweep')
                 else:
-                    saved = Get_saved_value()
-                    if saved is None:
-                        print('No saved message')
-                    else:
-                        print('Saved message: ' + saved)
-
-            except Exception as ex:
-                print('Unknown problem, Message command not received')
+                    Current = float(Current)/Cal
+                    max_v = float(max_v)
+                    Vout0.value = dac_value(Current) # Set the voltage
+                    Vout1.value = dac_value(max_v) # Set the voltage
+                    time.sleep(1)
+                max_v = float(max_v)
+                Vout0.value = dac_value(Current) # Set the voltage
+                Vout1.value = dac_value(max_v) # Set the voltage
+                time.sleep(0.1)
+                
+                Voltage = [get_voltage(Vin2), get_voltage(Vin3), get_voltage(Vin4), get_voltage(Vin5), get_voltage(Vin6)]
+                print('', Voltage)
+            except ValueError as ex:
+                print('')
                 print(ex)
+            else:
+                print("PWMset", ThePin, "=", str(SetPWM), end=' ')
+                print()
 
-        elif command.startswith("Get_cal"):
+        elif command.startswith("CurSweep"):
             try:
-                # Echo the saved payload, or a specific key if one is provided.
-                key = command[len("Get_cal"):].strip()
-                payload = Get_saved_value(key) if key else Get_saved_value("help")
-                if payload is None:
-                    if key:
-                        print('No saved value for key: ' + key)
-                    else:
-                        print('No saved message')
-                else:
-                    if key:
-                        print('Saved value: ' + payload)
-                    else:
-                        print('Saved message: ' + payload)
-            except Exception as ex:
-                print('Unknown problem, echo command not received')
+                key = command[len("CurSweep"):].strip()
+                max_v, start, end, steps = key.split(":", 3)  
+                max_v = float(max_v)
+                start = float(start)
+                end = float(end)
+                steps = int(steps)  
+                Voltage = [max_v, start, end, steps]
+                print('', Voltage)
+            except ValueError as ex:
+                print('')
                 print(ex)
+            else:
+                print("PWMset", ThePin, "=", str(SetPWM), end=' ')
+                print()
         
         else:
             print('\nERROR: Unknown command entered\n')
-
 #    else:
-#        print("if you are reading this, something has gone teribly wrong")
+#        print('If you can read this something has gone very wrong. ')
+
+
+
+
