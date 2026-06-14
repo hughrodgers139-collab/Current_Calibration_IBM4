@@ -79,7 +79,7 @@ import ast
 
 # define the class for interfacing to an IBM4
 
-class Ser_Iface(object):
+class Ser_Iface(object):    
     """
     class for interfacing to an IBM4
     """
@@ -239,6 +239,7 @@ class Ser_Iface(object):
                     self.instr_obj.write( str.encode( PWM_cmd ) )
                     read_result = self.instr_obj.read_until(size=PWM_cmd.__sizeof__()) # read_result returned as bytes and clear the input buffer  
                     read_result = self.instr_obj.read_until(b'\n', size=None) # read_result returned as bytes and clear the input buffer
+                print('IBM4 zeroed')
             else:
                 # Do nothing, no link to IBM4 established
                 pass
@@ -644,9 +645,11 @@ class Ser_Iface(object):
             if c10:
                 no_reads = 1 # 
                 read_cmd = 'Read%(v1)d:%(v2)d\r\n'%{"v1":self.Read_Chnnls[input_channel], "v2":no_reads} # generate the read command
+                print(f'Command sent to IBM4: {read_cmd}')
                 self.instr_obj.write( str.encode(read_cmd) ) # when using serial str must be encoded as bytes                
                 read_result = self.instr_obj.read_until(size=read_cmd.__sizeof__()) # read_result returned as bytes and clear the return message
-                read_result = self.instr_obj.read_until(b'\n',size=None) # read_result returned as bytes, must be cast to str before being parsed                    
+                read_result = self.instr_obj.read_until(b'\n',size=None) # read_result returned as bytes, must be cast to str before being parsed 
+                print(f'Raw result from IBM4: {read_result}')                   
                 vals = re.findall(r'[-+]?\d+[\.]?\d*', str(read_result) ) # parse the numeric values of read_result into a list
                 res = float(vals[-1])
                 if loud: 
@@ -1696,7 +1699,59 @@ class Ser_Iface(object):
             print(e)
             return None
         
-    def Current(self, Current = 0.0, Max_V = 2.0, numb_avg = 10,loud=True):
+    def Read_current_voltage(self, loud=False):
+        """
+        Echo the current settings from the IBM4 display.
+
+        Inputs:
+        loud (type: bool) whether to print the response
+
+        Returns:
+        tuple | None: current and voltage values if present, else None
+        """
+
+        self.FUNC_NAME = ".Read_current_voltage()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+
+            if c1:
+                write_cmd = 'Get_current\r\n'
+                self.instr_obj.reset_input_buffer()
+                self.instr_obj.write(str.encode(write_cmd))
+
+                response = ""
+                status_prefixes = ("C_V")
+
+                for _ in range(8):
+                    read_result = self.instr_obj.read_until(b'\n', size=None)
+                    line = read_result.decode(errors='replace').strip()
+
+                    if line.startswith(status_prefixes):
+                        response = line
+                        break
+                    else:
+                        fallback_line = line
+
+                if not response:
+                    response = "ERROR, No Voltage Measure"
+                response = response.replace('C_V', '').strip()  # Remove the prefix and any leading/trailing whitespace
+                current, voltage = response.split(" ", 1)
+                current = float(current)
+                voltage = float(voltage)
+                if loud:
+                    print(response)
+                return current, voltage
+            else:
+                self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+            return None
+
+    def Set_Current(self, Current = 0.0, Max_V = 2.0, delay = 0.1):
         """
         Echo the current settings from the IBM4 display.
 
@@ -1717,51 +1772,57 @@ class Ser_Iface(object):
         try:
             c1 = self.instr_obj is not None and self.instr_obj.isOpen()
             c3 = True if Current >= 0.0 and Current < 249 else False # confirm that the voltage sweep bounds are in range
-            c7 = True if numb_avg > 3 and numb_avg < 103 else False # confirm that no. averages being taken is a sensible value
             c8 = True if Max_V >= self.VMIN and Max_V <= self.VMAX else False # confirm that the fixed voltage is in range
             
-            if c1 and c3 and c7 and c8:
+            if c1 and c3 and c8:
                 # Sending "echo <key>" asks firmware for a specific dictionary value.
-                write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(Max_V), "v2": str(Current), "v3": str(numb_avg)}
-
-                check = write_cmd[len("Cur"):].strip()
+                write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(Max_V), "v2": str(Current), "v3": str(delay)}
 
                 self.instr_obj.reset_input_buffer()
                 self.instr_obj.write(str.encode(write_cmd))
 
-                response = ""
-                sent_line = write_cmd.strip()
-                status_prefixes = (
-                    "",
-                    'ERROR:',
-                )
-                fallback_line = ""
-                for _ in range(10):
-                    read_result = self.instr_obj.read_until(b'\n', size=None)
-                    line = read_result.decode(errors='replace').strip()
-                    if not line:
-                        continue
-                    if line == sent_line or line.startswith('echo'):
-                        continue
-                    if line.startswith(status_prefixes):
-                        response = line
-                        break
-                    if not fallback_line:
-                        fallback_line = line
+                return None
+            else:
+                if not c1:
+                    self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
+                if not c3:
+                    self.ERR_STATEMENT += '\nCurrent must be greater than 0 and within range [0.0, 249.0]'
+                if not c8:  
+                    self.ERR_STATEMENT += '\nMax_V out of range\nMust be between 0.0 and 3.29'
+                raise Exception
+        except Exception as e:
+            print(self.ERR_STATEMENT)
+            print(e)
+            return None
+        
+    def Current(self, Current = 0.0, Max_V = 2.0, numb_avg = 10, delay = 5):
+        """
+        Echo the current settings from the IBM4 display.
 
-                if not response:
-                    response = fallback_line
+        Inputs:
+        Current (type: float) desired current value
+        Max_V (type: float) maximum voltage
+        numb_avg (type: int) number of averages
+        delay (type: float) delay between measurements
 
-                saved_val = None
-                if response.startswith('V'):
-                    saved_val = response
-                elif response.startswith('ERROR:'):
-                    saved_val = None
+        Returns:
+        str | None: saved payload text/value if present, else None
+        """
 
-                if loud:
-                    print(response)
-                self.ZeroIBM4() 
-                return saved_val
+        self.FUNC_NAME = ".Current()"
+        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
+
+        try:
+            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
+            c3 = True if Current >= 0.0 and Current < 249 else False # confirm that the voltage sweep bounds are in range
+            c7 = True if numb_avg > 3 and numb_avg < 103 else False # confirm that no. averages being taken is a sensible value
+            c8 = True if Max_V >= self.VMIN and Max_V <= self.VMAX else False # confirm that the fixed voltage is in range
+            
+            if c1 and c3 and c7 and c8:
+
+                self.Set_Current(Current=Current, Max_V=Max_V, delay=delay)
+                current, Voltage = self.Read_current_voltage(loud=False)
+                return current, Voltage
             else:
                 if not c1:
                     self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
@@ -1770,78 +1831,6 @@ class Ser_Iface(object):
                 if not c7:
                     self.ERR_STATEMENT += '\nNumber of averages must be between 3 and 103'
                 if not c8:  
-                    self.ERR_STATEMENT += '\nMax_V out of range\nMust be between 0.0 and 3.29'
-                raise Exception
-        except Exception as e:
-            print(self.ERR_STATEMENT)
-            print(e)
-            return None
-
-    def Current_sweep(self, Max_V = 2.0, start=0.0, end=10.0, steps = 10, loud=True):
-        """
-        Echo the saved data from the IBM4 display.
-
-        Inputs:
-        key (type: str | None) optional dictionary key to request
-
-        Returns:
-        str | None: saved payload text/value if present, else None
-        """
-
-        self.FUNC_NAME = ".Current_sweep()"
-        self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
-
-        try:
-            c1 = self.instr_obj is not None and self.instr_obj.isOpen()
-            c4 = True if end > start and end <= 249 and start >= 0.0 else False # confirm that the voltage sweep bounds are in range
-            c5 = True if (end - start)/0.01 >= steps else False # confirm that the voltage sweep bounds are in range
-            c8 = True if Max_V >= self.VMIN and Max_V <= self.VMAX else False # confirm that the fixed voltage is in range
-
-            if c1 and c4 and c5 and c8:
-                # Sending "echo <key>" asks firmware for a specific dictionary value.
-                # write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(end), "v2": str(Max_V), "v3": str(steps)}
-
-                write_cmd = 'sweep %(v1)s:%(v2)s:%(v3)s:%(v4)s\r\n' % {"v1": str(Max_V), "v2": str(start), "v3": str(end), "v4": str(steps)}
-
-
-                self.instr_obj.reset_input_buffer()
-                self.instr_obj.write(str.encode(write_cmd))
-
-                response = ""
-                sent_line = write_cmd.strip()
-                status_prefixes = (
-                    "v",
-                    'ERROR:',
-                )
-                fallback_line = ""
-                responce = numpy.array([])  # Initialize an empty numpy array to store the responses
-                for i in range(steps+3):  # Read enough lines to cover all steps and potential echoes
-                    read_result = self.instr_obj.read_until(b'\n', size=None)
-                    line = read_result.decode(errors='replace').strip()
-                    if not line:
-                        continue
-                    if line == sent_line or line.startswith('echo'):
-                        continue
-                    if line.startswith(status_prefixes):
-                        line = (numpy.array(line.replace('v', '')))
-                        response = numpy.vstack([response, line])
-
-                    if not fallback_line:
-                        fallback_line = line
-
-                if loud:
-                    print(responce)
-                self.ZeroIBM4() 
-
-                return responce
-            else:
-                if not c1:
-                    self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'
-                if not c4:
-                    self.ERR_STATEMENT += '\nEnd must be greater than start and within range [0.0, 249.0]'
-                if not c5:
-                    self.ERR_STATEMENT += '\nNumber of steps must be less than or equal to (end - start)/0.01'
-                if not c8:
                     self.ERR_STATEMENT += '\nMax_V out of range\nMust be between 0.0 and 3.29'
                 raise Exception
         except Exception as e:
