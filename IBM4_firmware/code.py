@@ -218,25 +218,26 @@ def load_saved_payload():
         # Not JSON → wrap raw string
         return {"value": decoded}
 
-def find_charge_key_above(d, threshold):
-    for k in d.keys():
-        if k.startswith("charge_"):
-            try:
-                num = float(k.split("_", 1)[1])
-                if num > threshold:
-                    return k
-            except ValueError:
-                pass
-    return None
-
+def time_delay(data: dict, voltage: float):
+    # Find the key (as string) whose float value is closest to the voltage
+    closest_key = min(data.keys(), key=lambda k: abs(float(k) - voltage))
+    return data[closest_key]
 
 Dict = load_saved_payload()
 
 Cal = float(Dict["cal"])
 
-ChargeDict = {k: v for k, v in Dict.items() if k.startswith("charge_")}
-DischargeDict = {k: v for k, v in Dict.items() if k.startswith("discharge_")}
-ChangeDict = {k: v for k, v in Dict.items() if k.startswith("change_")}
+ChargeDict = {float(k.split("_")[1]): v 
+              for k, v in Dict.items() 
+              if k.startswith("charge_")}
+
+DischargeDict = {float(k.split("_")[1]): v 
+                 for k, v in Dict.items() 
+                 if k.startswith("discharge_")}
+
+ChangeDict = {float(k.split("_")[1]): v 
+              for k, v in Dict.items() 
+              if k.startswith("change_")}
 
 
 
@@ -593,12 +594,6 @@ while True:
                         print('Message saved: ' + payload)
                     else:
                         print('ERROR: Could not save message')
-                else:
-                    saved = Get_saved_value()
-                    if saved is None:
-                        print('No saved message')
-                    else:
-                        print('Saved message: ' + saved)
 
             except Exception as ex:
                 print('Unknown problem, Message command not received')
@@ -615,16 +610,13 @@ while True:
                     continue
 
                 if key == "charge":
-                    filtered = {k: v for k, v in Dict.items() if k.startswith("charge_")}
-                    print("Saved value: " + str(filtered))
+                    print("Saved value: " + str(ChargeDict))
                     continue
                 if key == "discharge":
-                    filtered = {k: v for k, v in Dict.items() if k.startswith("discharge_")}
-                    print("Saved value: " + str(filtered))
+                    print("Saved value: " + str(DischargeDict))
                     continue
                 if key == "change":
-                    filtered = {k: v for k, v in Dict.items() if k.startswith("change_")}
-                    print("Saved value: " + str(filtered))
+                    print("Saved value: " + str(ChangeDict))
                     continue
 
                 if key in Dict:
@@ -641,7 +633,6 @@ while True:
                 key = command[len("Cur"):].strip()
                 max_v, Current, delay = key.split(":", 2)
                 delay = float(delay)
-                # delay = find_values_above(ChargeDict, (Current/Cal))
                 if Cal is None:
                     print('ERROR', 'Calibration value not found, cannot perform CurSweep')
                 else:
@@ -649,7 +640,9 @@ while True:
                     max_v = float(max_v)
                     Vout0.value = dac_value(Current) # Set the voltage
                     Vout1.value = dac_value(max_v) # Set the voltage
-                    time.sleep(delay)
+                    delay_time = time_delay(ChargeDict, Current)
+                    delay_time = max(delay_time, delay) 
+                    time.sleep(float(delay_time))
 
             except ValueError as ex:
                 print(ex)

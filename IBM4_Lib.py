@@ -1737,6 +1737,7 @@ class Ser_Iface(object):
                 if not response:
                     response = "ERROR, No Voltage Measure"
                 response = response.replace('C_V', '').strip()  # Remove the prefix and any leading/trailing whitespace
+                print(f"Debug: Response after processing: '{response}'")  # Debug print to check the response format
                 current, voltage = response.split(" ", 1)
                 current = float(current)
                 voltage = float(voltage)
