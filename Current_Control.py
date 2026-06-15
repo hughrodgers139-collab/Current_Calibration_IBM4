@@ -1,3 +1,4 @@
+import ast
 import time
 import numpy as np
 import matplotlib
@@ -429,7 +430,7 @@ class IBM4Cal:
         except Exception as e:
             print(f"{self.ERR_STATEMENT}: {e}")
             raise
-  
+
     # ------------------------------------------------------------------
     # Internal: max voltage and CurCal
     # ------------------------------------------------------------------
@@ -507,7 +508,7 @@ class IBM4Cal:
             self.IBM4_Dict["r2"] = np.corrcoef(sweep_data[:, 0], sweep_data[:, ch])[0, 1] ** 2
             self.IBM4_Dict["resistor"] = self.resistor
             self.IBM4_Dict["currents_tested"] = [f"{A0 * self.cal_factor[0]}" for A0 in A0_max_list]
-            self.IBM4_Dict["help"] = 'use Key = ALL to see saved values' 
+            self.IBM4_Dict["help"] = 'use Key = ALL to see saved values, charge, discharge, change for the plateau times' 
 
             self.IBM4_Dict.update(self.Charge_times)
             self.IBM4_Dict.update(self.Discharge_times)
@@ -534,17 +535,17 @@ class IBM4Cal:
             )
             plt.show()
             
-  
+
             for key, value in self.IBM4_Dict.items():
                 print(f"{key}: {value}")
 
             
             while True:    
-                choise = input("Do you want to save the calibration data to IBM4 firmware? (y/n): ").strip().lower()
-                if choise == 'y':
+                choice = input("Do you want to save the calibration data to IBM4 firmware? (y/n): ").strip().lower()
+                if choice == 'y':
                     self.save_dict_to_IBM4(self.IBM4_Dict)
                     break
-                elif choise == 'n':
+                elif choice == 'n':
                     print("Calibration data not saved to IBM4 firmware.")
                     break
                 else:
@@ -618,7 +619,7 @@ class IBM4Cal:
             print('Sweep complete')
             self.the_dev.ZeroIBM4() # ground the analog outputs
             return voltage_data
-         
+        
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)   
@@ -652,7 +653,7 @@ class IBM4Cal:
 
 class Current_Control():
     """
-    Class to control current settings on the IBM4 device.
+    Class to control current using the IBM4 device.
     """
 
     def __init__(self):
@@ -661,18 +662,77 @@ class Current_Control():
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
         self.the_dev = IBM4_Lib.Ser_Iface()
 
-    def set_current(self, Current: float, Max_V: float, numb_avg: int = 10):
+    def other_sweep_current(self, Max_V: float, start: float = 0, end: float = 10, steps: int = 10, Min_delay: float = 0.1):
         """
-        Set the current and maximum voltage on the IBM4 device.
+        Sweep the current from 0 to the specified Current value in steps.
         """
         try:
-            self.the_dev.Current(Current=Current, Max_V=Max_V, numb_avg=numb_avg)
+            if steps > 500: # be responsible
+                steps = 500
+            for i in range(steps + 1):
+                current_value = start + (end - start) * i / steps
+                current, voltage = self.the_dev.Send_Measure_current(Current=current_value, Max_V=Max_V, numb_avg=10, delay = Min_delay)
+                print(f"Step {i}: Current: {current}, Voltage: {voltage}")
+        except Exception as e:
+            print(f"{self.ERR_STATEMENT}: {e}")
+            raise
+
+    def Just_Current(self, Current: float = 100.0, Max_V: float = 3.3, delay: float = 5):
+        """
+        Echo the current settings from the IBM4 display.
+        """
+        
+        try:
+            current, voltage = self.the_dev.Send_Measure_current(Current=Current, Max_V=Max_V, numb_avg=10, delay=delay)
+            self.the_dev.ZeroIBM4()
+            print(f"Current: {current}, Voltage: {voltage}")
+
+        except Exception as e:
+            print(f"{self.ERR_STATEMENT}: {e}")
+            raise
+
+    def IV_diagram(self, Max_V: float, start: float = 0, end: float = 10, steps: int = 10, Min_delay: float = 0.1):
+        """
+        Sweep the current from one value to another to the specified Current value in steps.
+        this can do reverse sweep as well, just set start > end
+        will automatically plot the IV diagram using matplotlib
+
+        """
+        try:
+            current_plot = np.array([])
+            voltage_plot = np.array([])
+
+            if steps > 500: # be responsible
+                steps = 500
+            for i in range(steps + 1):
+                current_value = start + (end - start) * i / steps
+                current, voltage = self.the_dev.Send_Measure_current(Current=current_value, Max_V=Max_V, numb_avg=10, delay = Min_delay)
+                current_plot = np.append(current_plot, current)
+                voltage_plot = np.append(voltage_plot, voltage)
+            
+            plt.plot(current_plot, voltage_plot, marker='o')
+            plt.xlabel("Current (mA)")
+            plt.ylabel("Voltage (V)")
+            plt.title("IV diagram")
+            plt.grid()
+            plt.show()
+        except Exception as e:
+            print(f"{self.ERR_STATEMENT}: {e}")
+            raise
+
+    def set_current(self, Current: float = 100.0, Max_V: float = 3.3, delay: float = 0.0):
+        """
+        Set the current on the IBM4 device.
+        """
+        try:
+            self.the_dev.Set_Current(Current=Current, Max_V=Max_V, delay=delay)
+            print(f"Current set to {Current} mA with Max Voltage {Max_V} V.")
         except Exception as e:
             print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
     def Get_saved_values(self, key: str | None = None):
-        print("Retrieving calibration data from IBM4...")
+        print("\n")
         """
         Get saved calibration from IBM4 firmware.
         """
@@ -682,6 +742,7 @@ class Current_Control():
             self.the_dev = IBM4_Lib.Ser_Iface()
         try:
             response = self.the_dev.Read_Cal_from_IBM4(key=key)
+            print("\n")
             return response
         finally:
             if self.the_dev is not None:
