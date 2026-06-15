@@ -430,7 +430,7 @@ class IBM4Cal:
         except Exception as e:
             print(f"{self.ERR_STATEMENT}: {e}")
             raise
-  
+
     # ------------------------------------------------------------------
     # Internal: max voltage and CurCal
     # ------------------------------------------------------------------
@@ -535,17 +535,17 @@ class IBM4Cal:
             )
             plt.show()
             
-  
+
             for key, value in self.IBM4_Dict.items():
                 print(f"{key}: {value}")
 
             
             while True:    
-                choise = input("Do you want to save the calibration data to IBM4 firmware? (y/n): ").strip().lower()
-                if choise == 'y':
+                choice = input("Do you want to save the calibration data to IBM4 firmware? (y/n): ").strip().lower()
+                if choice == 'y':
                     self.save_dict_to_IBM4(self.IBM4_Dict)
                     break
-                elif choise == 'n':
+                elif choice == 'n':
                     print("Calibration data not saved to IBM4 firmware.")
                     break
                 else:
@@ -619,7 +619,7 @@ class IBM4Cal:
             print('Sweep complete')
             self.the_dev.ZeroIBM4() # ground the analog outputs
             return voltage_data
-         
+        
         except Exception as e:
             print(self.ERR_STATEMENT)
             print(e)   
@@ -667,21 +667,23 @@ class Current_Control():
         Sweep the current from 0 to the specified Current value in steps.
         """
         try:
-            
+            if steps > 500: # be responsible
+                steps = 500
             for i in range(steps + 1):
                 current_value = start + (end - start) * i / steps
-                current, voltage = self.the_dev.Current(Current=current_value, Max_V=Max_V, numb_avg=10, delay = Min_delay)
+                current, voltage = self.the_dev.Send_Measure_current(Current=current_value, Max_V=Max_V, numb_avg=10, delay = Min_delay)
                 print(f"Step {i}: Current: {current}, Voltage: {voltage}")
         except Exception as e:
             print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
-    def Current(self, Current: float = 100.0, Max_V: float = 3.3, delay: float = 5):
+    def Just_Current(self, Current: float = 100.0, Max_V: float = 3.3, delay: float = 5):
         """
         Echo the current settings from the IBM4 display.
         """
+        
         try:
-            current, voltage = self.the_dev.Current(Current=Current, Max_V=Max_V, numb_avg=10, delay=delay)
+            current, voltage = self.the_dev.Send_Measure_current(Current=Current, Max_V=Max_V, numb_avg=10, delay=delay)
             self.the_dev.ZeroIBM4()
             print(f"Current: {current}, Voltage: {voltage}")
 
@@ -691,14 +693,20 @@ class Current_Control():
 
     def IV_diagram(self, Max_V: float, start: float = 0, end: float = 10, steps: int = 10, Min_delay: float = 0.1):
         """
-        Sweep the current from 0 to the specified Current value in steps.
+        Sweep the current from one value to another to the specified Current value in steps.
+        this can do reverse sweep as well, just set start > end
+        will automatically plot the IV diagram using matplotlib
+
         """
         try:
             current_plot = np.array([])
             voltage_plot = np.array([])
+
+            if steps > 500: # be responsible
+                steps = 500
             for i in range(steps + 1):
                 current_value = start + (end - start) * i / steps
-                current, voltage = self.the_dev.Current(Current=current_value, Max_V=Max_V, numb_avg=10, delay = Min_delay)
+                current, voltage = self.the_dev.Send_Measure_current(Current=current_value, Max_V=Max_V, numb_avg=10, delay = Min_delay)
                 current_plot = np.append(current_plot, current)
                 voltage_plot = np.append(voltage_plot, voltage)
             
@@ -712,7 +720,7 @@ class Current_Control():
             print(f"{self.ERR_STATEMENT}: {e}")
             raise
 
-    def set_current(self, Current: float = 100.0, Max_V: float = 3.3, delay: float = 5):
+    def set_current(self, Current: float = 100.0, Max_V: float = 3.3, delay: float = 0.0):
         """
         Set the current on the IBM4 device.
         """

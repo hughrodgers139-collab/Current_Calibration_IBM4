@@ -1594,7 +1594,6 @@ class Ser_Iface(object):
                 sent_line = write_cmd.strip()
                 response = ""
 
-                # Some serial stacks echo command text (sometimes partially).
                 # Read several lines and keep the first status-like line.
                 status_prefixes = ('Message saved:', 'ERROR:', 'Unknown problem')
                 fallback_line = ""
@@ -1643,7 +1642,6 @@ class Ser_Iface(object):
             c1 = self.instr_obj is not None and self.instr_obj.isOpen()
 
             if c1:
-                # Sending "echo <key>" asks firmware for a specific dictionary value.
                 if key is None:
                     write_cmd = 'Get_cal\r\n'
                 else:
@@ -1666,8 +1664,6 @@ class Ser_Iface(object):
                     read_result = self.instr_obj.read_until(b'\n', size=None)
                     line = read_result.decode(errors='replace').strip()
                     if not line:
-                        continue
-                    if line == sent_line or line.startswith('echo'):
                         continue
                     if line.startswith(status_prefixes):
                         response = line
@@ -1699,11 +1695,12 @@ class Ser_Iface(object):
             print(e)
             return None
         
-    def Read_current_voltage(self, loud=False):
+    def Read_current_voltage(self, num_avg=10, loud=False):
         """
         Echo the current settings from the IBM4 display.
 
         Inputs:
+        num_avg (type: int) number of measurements to average
         loud (type: bool) whether to print the response
 
         Returns:
@@ -1717,7 +1714,9 @@ class Ser_Iface(object):
             c1 = self.instr_obj is not None and self.instr_obj.isOpen()
 
             if c1:
-                write_cmd = 'Get_current\r\n'
+                  # Number of measurements to average
+                write_cmd = 'Get_current %(v1)s\r\n' % {"v1": str(num_avg)}
+
                 self.instr_obj.reset_input_buffer()
                 self.instr_obj.write(str.encode(write_cmd))
 
@@ -1776,7 +1775,6 @@ class Ser_Iface(object):
             c8 = True if Max_V >= self.VMIN and Max_V <= self.VMAX else False # confirm that the fixed voltage is in range
             
             if c1 and c3 and c8:
-                # Sending "echo <key>" asks firmware for a specific dictionary value.
                 write_cmd = 'Cur %(v1)s:%(v2)s:%(v3)s\r\n' % {"v1": str(Max_V), "v2": str(Current), "v3": str(delay)}
 
                 self.instr_obj.reset_input_buffer()
@@ -1796,7 +1794,7 @@ class Ser_Iface(object):
             print(e)
             return None
         
-    def Current(self, Current = 0.0, Max_V = 2.0, numb_avg = 10, delay = 5):
+    def Send_Measure_current(self, Current = 0.0, Max_V = 2.0, numb_avg = 10, delay = 0.1):
         """
         Echo the current settings from the IBM4 display.
 
@@ -1810,7 +1808,7 @@ class Ser_Iface(object):
         str | None: saved payload text/value if present, else None
         """
 
-        self.FUNC_NAME = ".Current()"
+        self.FUNC_NAME = ".Send_Measure_current()"
         self.ERR_STATEMENT = "Error: " + self.MOD_NAME_STR + self.FUNC_NAME
 
         try:
@@ -1822,7 +1820,7 @@ class Ser_Iface(object):
             if c1 and c3 and c7 and c8:
 
                 self.Set_Current(Current=Current, Max_V=Max_V, delay=delay)
-                current, Voltage = self.Read_current_voltage(loud=False)
+                current, Voltage = self.Read_current_voltage(num_avg=numb_avg, loud=False)
                 return current, Voltage
             else:
                 if not c1:
