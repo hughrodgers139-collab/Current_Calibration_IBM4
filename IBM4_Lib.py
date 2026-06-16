@@ -1820,8 +1820,8 @@ class Ser_Iface(object):
             if c1 and c3 and c7 and c8:
 
                 self.Set_Current(Current=Current, Max_V=Max_V, delay=delay)
-                current, Voltage = self.Read_current_voltage(num_avg=numb_avg, loud=False)
-                return current, Voltage
+                current, voltage = self.Read_current_voltage(num_avg=numb_avg, loud=False)
+                return current, voltage
             else:
                 if not c1:
                     self.ERR_STATEMENT += '\nCould not read from instrument\nNo comms established'

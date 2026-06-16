@@ -685,7 +685,7 @@ class Current_Control():
         try:
             current, voltage = self.the_dev.Send_Measure_current(Current=Current, Max_V=Max_V, numb_avg=10, delay=delay)
             self.the_dev.ZeroIBM4()
-            print(f"Current: {current}, Voltage: {voltage}")
+            print(f"Current: {current, voltage}")
 
         except Exception as e:
             print(f"{self.ERR_STATEMENT}: {e}")
